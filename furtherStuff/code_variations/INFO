@@ -1,0 +1,9 @@
+linearSystem_htd_without_Cython_checkDiffs.py:
+
+checks how much the flow situation changes in the different generations due to one RBC changing its vessel
+
+
+linearSystem_htd_without_Cython_checkRBCFlow.py:
+
+counts the number of RBCs entering each branch, lists the changes in effective resistance resulting from one RBC entering the branch
+

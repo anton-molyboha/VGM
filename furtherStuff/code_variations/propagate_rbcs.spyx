@@ -1,0 +1,2224 @@
+# /ython: profile=True
+from __future__ import division, with_statement
+
+from copy import deepcopy
+#import cPickle
+#import matplotlib.pyplot as plt
+import numpy as np
+import cython
+#cimport physiology
+cimport numpy as np
+#cimport libc.stdio as stdio
+#from pylab import is_string_like
+
+__all__ = ['sort_edges','propagate']
+
+# -----------------------------------------------------------------------------
+def sort_edges(graph,edges):
+
+    G = graph
+    edgeList=G.es[edges]
+    
+    pOut=[G.vs[e['target']]['pressure'] if e['sign'] == 1.0 else G.vs[e['source']]['pressure']
+        for e in edgeList]
+    sortedE=zip(pOut,range(len(edgeList)))
+    sortedE.sort()
+    sortedE=[i[1] for i in sortedE]
+    
+    return sortedE
+    
+# -----------------------------------------------------------------------------
+def propagate(G,double dt,sortedE,rbcsMovedPerEdge,eps):
+
+    convEdges2=[]
+    rbcMoved=0
+    vertexUpdate=[]
+    edgeUpdate=[]
+    #SECOND step go through all edges from smallest to highest pressure and move RBCs
+    for ei in sortedE:
+        edgesInvolved=[]
+        e = G.es[ei]
+        sign=e['sign']
+        #Get bifurcation vertex
+        if sign == 1:
+            vi=e.target
+        else:
+            vi=e.source
+        for i in G.vs[vi]['inflowE']:
+             edgesInvolved.append(i)
+        for i in G.vs[vi]['outflowE']:
+             edgesInvolved.append(i)
+    # for EInv in edgesInvolved:
+    #     print('edgesInvolved '+str(EInv)+' start')
+    #     eInv=G.es(EInv)
+    #     if len(eInv['rRBC'][0]) > 0:
+    #         for i in eInv['rRBC'][0]:
+    #             if i < 0 or i > eInv['length']:
+    #                 print('BIGERROR START')
+    #                 print(eInv['rRBC'])
+    #                 print(EInv)
+    #                 print(eInv['sign'])
+    #                 print(eInv['length'])
+    #                 print(vi)
+    #                 print(G.vs[vi]['vType'])
+    #         for i in range(len(eInv['rRBC'][0])-1):
+    #             if eInv['rRBC'][0][i] > eInv['rRBC'][0][i+1]:
+    #                 print('BIGERROR START2')
+    #                 print(eInv['rRBC'])
+    #                 print(EInv)
+    #                 print(eInv['sign'])
+    #                 print(eInv['length'])
+    #         for i in range(len(eInv['rRBC'][0])-1):
+    #             if eInv['rRBC'][0][i+1]- eInv['rRBC'][0][i] < eInv['minDist']-10*eps:
+    #                 print('BIGERROR START3')
+    #                 print(eInv['rRBC'])
+    #                 print(EInv)
+    #                 print(eInv['sign'])
+    #                 print(eInv['length'])
+    #                 print(eInv['minDist'])
+    #                 print(eInv['rRBC'][0][i+1]- eInv['rRBC'][0][i])
+    #                 print(i)
+    #                 print(vi)
+    #                 print(G.vs[vi]['inflowE'])
+    #                 print(G.vs[vi]['outflowE'])
+    #                 print(G.vs[vi]['vType'])
+        overshootsNo=0
+        if e['httBC'] is not None:
+            #print('Check adding RBCs')
+            #print(e.index)
+            #print(e['minDist'])
+            rRBC = []
+            lrbc = e['minDist']
+            htt = e['httBC']
+            length = e['length']
+            cum_length =  min(e['v'] * dt,length)
+            if len(e['rRBC']) > 0:
+                distToFirst=e['rRBC'][0] if e['sign']==1.0 else e['length']-e['rRBC'][-1]
+                if cum_length > distToFirst:
+                    cum_length = distToFirst
+            if cum_length >= lrbc:
+                nrbc_max = cum_length / lrbc
+                #print(nrbc_max)
+                nrbc_max_floor = np.floor(nrbc_max)
+                #print(nrbc_max_floor)
+                nrbc = sum(np.random.rand(nrbc_max_floor)<htt)
+                #number of RBCs randomly chosen to average htt
+                nrbc = int(np.round((np.random.rand(1)[0]+0.5)*htt*nrbc_max_floor))
+                lrbc_modulo = (nrbc_max - nrbc_max_floor) * lrbc
+                start = 0-lrbc
+                stop = cum_length
+                rands=np.random.rand(nrbc)
+                for i in range(nrbc):
+                    #pos = rands[i] * (stop - ((nrbc-i)*lrbc) - start) + start
+                    pos = start + lrbc +rands[i]*lrbc_modulo
+                    start = pos
+                    lrbc_modulo = lrbc_modulo - rands[i]*lrbc_modulo
+                    rRBC.append(pos)
+                rRBC = np.array(rRBC)
+                #print(nRBC)
+                #print(rRBC)
+                if e['sign'] == 1:
+                    #print('RBCs added at Input')
+                    #print(e['rRBC'])
+                    e['rRBC'] = np.concatenate([rRBC, e['rRBC']])
+                    #print(e['rRBC'])
+                    #print('vertexUpdate')
+                    vertexUpdate.append(e.target)
+                    vertexUpdate.append(e.source)
+                    edgeUpdate.append(ei)
+                else:
+                    ##print('RBCs added at Input')
+                    #print(e['rRBC'])
+                    #print('vertexUpdate')
+                    e['rRBC'] = np.concatenate([e['rRBC'], length-rRBC[::-1]])
+                    #print(e['rRBC'])
+                    vertexUpdate.append(e.target)
+                    vertexUpdate.append(e.source)
+                    edgeUpdate.append(ei)
+        if ei not in convEdges2:
+            #If RBCs are present move all RBCs
+            #print('Move RBCs')
+            #print(e['rRBC'])
+            if len(e['rRBC']) > 0:
+                e['rRBC'] = e['rRBC'] + e['v'] * dt * e['sign']
+            	#print(e['rRBC'])
+            #THIRD step #Deal with bifurcation events and overshoots in every edge
+            #bifRBCsIndes - array from smallest to largest index
+                bifRBCsIndex=[]
+                nRBC=len(e['rRBC'])
+                if sign == 1.0:
+                    if e['rRBC'][-1] > e['length']:
+                        for i,j in enumerate(e['rRBC'][::-1]):
+                            if j > e['length']:
+                                bifRBCsIndex.append(nRBC-1-i)
+                            else:
+                                break
+                    bifRBCsIndex=bifRBCsIndex[::-1]
+                    #bifRBCsIndex=[ i for (i,j) in enumerate(e['rRBC']) if j >= e['length'] ]
+                else:
+                    if e['rRBC'][0] < 0:
+                        for i,j in enumerate(e['rRBC']):
+                            if j < 0:
+                                bifRBCsIndex.append(i)
+                            else:
+                                break
+                #bifRBCsIndex=[ i for (i,j) in enumerate(e['rRBC']) if j <= 0 ]
+                noBifEvents=len(bifRBCsIndex)
+            else:
+                noBifEvents = 0
+            #print(e['minDist'])
+            #print(noBifEvents)
+        #-------------------------------------------------------------------------------------------
+            #Check if a bifurcation event is taking place
+            if noBifEvents > 0:
+                #If Edge is outlflow Edge, simply remove RBCs
+                if G.vs[vi]['vType'] == 2:
+                    #print('at outflow')
+                    e['rRBC']=[e['rRBC'][:-noBifEvents] if sign == 1.0 else e['rRBC'][noBifEvents::]][0]
+                    vertexUpdate.append(e.target)
+                    vertexUpdate.append(e.source)
+                    edgeUpdate.append(ei)
+        #-------------------------------------------------------------------------------------------
+                #if vertex is connecting vertex
+                elif G.vs[vi]['vType'] == 5:
+                    #print('at connecting vertex')
+                    outE=G.vs[vi]['outflowE'][0]
+                    oe=G.es[outE]
+                    #print(len(oe['rRBC']))
+                    #print(oe['length'])
+                    #print(oe['sign'])
+                    #if len(oe['rRBC']) > 0:
+                        #print(oe['rRBC'][0])
+                        #print(oe['rRBC'][-1])
+        		    #Distance to first RBC in outEdge
+                    if len( oe['rRBC']) > 0:
+                        distToFirst=oe['rRBC'][0] if oe['sign'] == 1.0 else oe['length']-oe['rRBC'][-1]
+                    else:
+                        distToFirst=oe['length']
+                    #Check how many RBCs fit into the new Vessel
+                    posNoBifEvents=int(np.floor(distToFirst/oe['minDist']))
+                    #Check how many RBCs are allowed by nMax
+                    if posNoBifEvents + len(oe['rRBC']) > oe['nMax']:
+                        posNoBifEvents = int(oe['nMax'] - len(oe['rRBC']))
+                    #print('posNoBifEvents')
+                    #print(posNoBifEvents)
+        		    #OvershootsNo: compare posNoBifEvents with noBifEvents
+                    if posNoBifEvents > noBifEvents:
+                        posBifRBCsIndex = bifRBCsIndex
+                        overshootsNo=noBifEvents
+                    elif posNoBifEvents == 0:
+                        posBifRBCsIndex=[]
+                        overshootsNo=0
+                    else:
+                        posBifRBCsIndex=[bifRBCsIndex[-posNoBifEvents::] if sign == 1.0 \
+                            else bifRBCsIndex[:posNoBifEvents]]
+                        overshootsNo=posNoBifEvents
+                    if overshootsNo > 0:
+                        #overshoots Dist starts wiht the RBC which overshoots the least 
+                        overshootDist=[e['rRBC'][posBifRBCsIndex]-[e['length']]*overshootsNo if sign == 1.0     
+                            else [0]*overshootsNo-e['rRBC'][posBifRBCsIndex]][0]
+                        if sign != 1.0:
+                            overshootDist = overshootDist[::-1]
+                        overshootTime=overshootDist / ([e['v']]*overshootsNo)
+                        #print(overshootDist)
+                        position=np.array(overshootTime)*np.array([oe['v']]*overshootsNo)
+                        #TODO NOW: Bereits hier schauen ob bei position zu nah beieinander. dann kann viel vom restlichen code weg
+                        #Maxmimum number of overshoots possible is infact limited by the overshootDistance of the
+                        #first RBC
+                        #print('Check how far first one overshooted')
+                        #print(position)
+                        #print(oe['minDist'])
+                        #print(overshootsNo)
+                        #print(np.floor(position[-1]/oe['minDist']))
+                        overshootsNoReduce=0
+                        if overshootsNo > 1:
+                            for i in range(1,overshootsNo):
+                                index = -1*i
+                                overshootsNoEff=np.floor(position[index]/oe['minDist'])
+                                if overshootsNoEff < overshootsNo-i:
+                                    overshootsNoReduce += 1
+                        overshootsNo = overshootsNo-overshootsNoReduce
+                        position=position[-1*overshootsNo::]
+                        rbcsMovedPerEdge.append(overshootsNo)
+                        #print(position)
+                        #print(overshootsNo)
+                        ##print(oe['rRBC'])
+                        #print(len(oe['rRBC']))
+                        #print(oe['sign'])
+                        #print(oe['length'])
+                        #Add rbcs to new Edge       
+                        if oe['sign'] == 1.0:
+                            #print('CHECK CONCATENATE connectV')
+                            #print(position)
+                            ##print(oe['rRBC'])
+                            oe['rRBC']=np.concatenate([position, oe['rRBC']])
+                            ##print(oe['rRBC'])
+                            #print(outE)
+                        else:
+                            #print('CHECK CONCATENATE connectV')
+                            #print(position)
+                            ##print(oe['rRBC'])
+                            #print(oe['length'])
+                            #print(position[::-1])
+                            #print([oe['length']]*overshootsNo)
+                            position = [oe['length']]*overshootsNo - position[::-1]
+                            oe['rRBC']=np.concatenate([oe['rRBC'],position])
+                            ##print(oe['rRBC'])
+                            #print(outE)
+                        ##print(oe['rRBC'])
+                        if len(oe['rRBC']) > oe['nMax']:
+                            print('ERROR NEW')
+                            print(len(oe['rRBC']))
+                            print(oe['nMax'])
+                            print(outE)
+                        #Remove RBCs from old Edge
+                        #print('Remove RBC')
+                        ##print(e['rRBC'])
+                        #print(overshootsNo)
+                        if overshootsNo > 0:
+                            if sign == 1.0:
+                                e['rRBC']=e['rRBC'][:-overshootsNo]
+                            else:
+                                e['rRBC']=e['rRBC'][overshootsNo::]
+                        ##print(e['rRBC'])
+                        #Recheck if the distance between the newly introduces RBCs is still big enough
+        			#TODO: this should not be necessary, 
+        			#TODO it is now implemented, that it is check if a RBC overshoots a whole vessel in 
+                        #TODO besser schreiben
+        			#one time step, if so it is pushed backwards
+                        if len(oe['rRBC']) > 0:
+                            #print('Recheck RBC positions')
+                            #print(overshootsNo)
+                            #print(len(oe['rRBC']))
+                            ##print(oe['rRBC'])
+                            #print(oe['length'])
+                            #print(oe['sign'])
+                            if overshootsNo == len(oe['rRBC']):
+                                if oe['sign'] == 1.0:
+                                    iter=overshootsNo-2
+                                    if oe['rRBC'][-1] > oe['length']:
+                                        oe['rRBC'][-1]=oe['length']
+                                else:               
+                                    iter=overshootsNo-1                
+                                    if oe['rRBC'][0] < 0:
+                                        oe['rRBC'][0]=0
+                                #print(oe['rRBC'])
+                            else:
+                                if oe['sign']==1.0:
+                                    iter=overshootsNo-1
+                                else:
+                                    iter=overshootsNo
+                            #print(iter)
+                            #print(oe['minDist'])
+                            if oe['sign']==1.0:
+                                for i in range(iter,-1,-1):
+                                    if oe['rRBC'][i+1]-oe['rRBC'][i] < oe['minDist'] \
+                                        or oe['rRBC'][i+1]-oe['rRBC'][i] < 0:
+                                        #print('RBC moved')
+                                        #print(i)
+                                        #print(oe['rRBC'][i])
+                                        oe['rRBC'][i]=oe['rRBC'][i+1]-oe['minDist']
+                                        #print(oe['rRBC'][i])
+                            else:
+                                for i in range(-1*iter,0,1):
+                                    if oe['rRBC'][i]-oe['rRBC'][i-1] < oe['minDist'] \
+                                        or oe['rRBC'][i]-oe['rRBC'][i-1] < 0:          
+                                        oe['rRBC'][i]=oe['rRBC'][i-1]+oe['minDist']
+                                        #print('RBC moved')
+                                        #print(i)
+                                        #print(oe['rRBC'][i])
+                                        oe['rRBC'][i]=oe['rRBC'][i-1]+oe['minDist']
+                                        #print(oe['rRBC'][i])
+                    #Deal with RBCs which could not be reassigned to the new edge because of a traffic jam
+                    noStuckRBCs=len(bifRBCsIndex)-overshootsNo
+                    #print('Check stuck RBCs')
+                    #print(noStuckRBCs)
+                    ##print(e['rRBC'])
+                    #move stuck RBCs back into vessel
+                    for i in range(noStuckRBCs):
+                        index=-1*(i+1) if sign == 1.0 else i
+                        e['rRBC'][index]=e['length']-i*e['minDist'] if sign == 1.0 else 0+i*e['minDist']
+                    #Recheck if the distance between the newly introduces RBCs is still big enough 
+                    if len(e['rRBC']) > 1:
+                        moved = 0
+                        count = 0
+                        if sign == 1.0:
+                            for i in range(-1,-1*(len(e['rRBC'])),-1):
+                                index=i-1
+                                if e['rRBC'][i] < e['rRBC'][index] or abs(e['rRBC'][i]-e['rRBC'][index]) < e['minDist']:
+                                    e['rRBC'][index]=e['rRBC'][i]-e['minDist']
+                                    moved = 1
+                                else:
+                                    moved = 0
+                                count += 1
+                                if count >= noStuckRBCs and moved == 0:
+                                    break
+                        else:
+                            for i in range(len(e['rRBC'])-1):
+                                index=i+1
+                                if e['rRBC'][i] > e['rRBC'][index] or abs(e['rRBC'][i]-e['rRBC'][index]) < e['minDist']:
+                                    e['rRBC'][index]=e['rRBC'][i]+e['minDist']
+                                    moved = 1
+                                else:
+                                    moved = 0
+                                count += 1
+                                if count >= noStuckRBCs+1 and moved == 0:
+                                    break
+      #-------------------------------------------------------------------------------------------
+                #if vertex is divergent vertex
+                elif G.vs[vi]['vType'] == 3:
+                    #print('is at divergent vertex')
+                    #print(e['rRBC'])
+                    #print(e['minDist'])
+                    #print(e['nMax'])
+                    #print(len(e['rRBC']))
+                    outEdges=G.vs[vi]['outflowE']
+                    outE=outEdges[0]
+                    outE2=outEdges[1]
+                    if len(outEdges) > 2:
+                        outE3=outEdges[2]
+        	            #Differ between capillaries and non-capillaries
+                    if G.vs[vi]['isCap']:
+                        preferenceList = [x[1] for x in sorted(zip(np.array(G.es[outEdges]['flow'])/np.array(G.es[outEdges]['crosssection']), \
+                            outEdges), reverse=True)]
+                    else:
+                        preferenceList = [x[1] for x in sorted(zip(G.es[outEdges]['flow'], outEdges), reverse=True)]
+        	            #Define prefered OutEdges
+                    outEPref=preferenceList[0]
+                    outEPref2=preferenceList[1]
+                    oe=G.es[outEPref]
+                    oe2=G.es[outEPref2]
+                    if len(outEdges) > 2:
+                        outEPref3 = preferenceList[2]
+                        oe3=G.es[outEPref3]
+                    #Calculate distance to first RBC
+                    if len(oe['rRBC']) > 0:
+                        distToFirst=oe['rRBC'][0] if oe['sign'] == 1.0 \
+                            else oe['length']-oe['rRBC'][-1]
+                    else:
+                        distToFirst=oe['length']
+                    if len(oe2['rRBC']) > 0:
+                        distToFirst2=oe2['rRBC'][0] if oe2['sign'] == 1.0 \
+                            else oe2['length']-oe2['rRBC'][-1]
+                    else:
+                        distToFirst2=oe2['length']
+                    if len(outEdges) > 2:
+                        if len(oe3['rRBC']) > 0:
+                            distToFirst3=oe3['rRBC'][0] if oe3['sign'] == 1.0 \
+                                else oe3['length']-oe3['rRBC'][-1]
+                        else:
+                            distToFirst3=oe3['length']
+                    #Check how many RBCs are allowed by nMax
+                    posNoBifEventsPref=np.floor(distToFirst/oe['minDist'])
+                    #print('posNoBifEventsPref')
+                    #print(posNoBifEventsPref)
+                    if posNoBifEventsPref + len(oe['rRBC']) > oe['nMax']:
+                        posNoBifEventsPref = oe['nMax'] - len(oe['rRBC'])
+                    #print(posNoBifEventsPref)
+                    posNoBifEventsPref2=np.floor(distToFirst2/oe2['minDist'])
+                    #print(posNoBifEventsPref2)
+                    if posNoBifEventsPref2 + len(oe2['rRBC']) > oe2['nMax']:
+                        posNoBifEventsPref2 = oe2['nMax'] - len(oe2['rRBC'])
+                    #print(posNoBifEventsPref2)
+                    if len(outEdges) > 2:
+                        posNoBifEventsPref3=np.floor(distToFirst3/oe3['minDist'])
+                        if posNoBifEventsPref3 + len(oe3['rRBC']) > oe3['nMax']:
+                            posNoBifEventsPref3 = oe3['nMax'] - len(oe3['rRBC'])
+                    #print('posNoBifEventsPrefered')
+                    #print(posNoBifEventsPref)
+                    #print(posNoBifEventsPref2)
+                    #Calculate total number of bifurcation events possible
+                    if len(outEdges) > 2:
+                        posNoBifEvents=int(posNoBifEventsPref+posNoBifEventsPref2+posNoBifEventsPref3)
+                    else:
+                        posNoBifEvents=int(posNoBifEventsPref+posNoBifEventsPref2)
+                    #print(posNoBifEvents)
+                    #Compare possible number of bifurcation events with number of bifurcations taking place
+                    #print('number of bifurcation events taking place')
+                    if posNoBifEvents > noBifEvents:
+                        posBifRBCsIndex=bifRBCsIndex
+                        overshootsNo=noBifEvents
+                    elif posNoBifEvents == 0:
+                        posBifRBCsIndex=[]
+                        overshootsNo=0
+                    else:
+                        posBifRBCsIndex=[bifRBCsIndex[-posNoBifEvents::] if sign == 1.0 \
+                            else bifRBCsIndex[:posNoBifEvents]]
+                        overshootsNo=posNoBifEvents
+                    #print('overshootsNo')
+                    #print(overshootsNo)
+                    #print('sign of outEdges')
+                    #print(oe['sign'])
+                    #print(oe2['sign'])
+                    if overshootsNo > 0:
+                        #overshootDist starts with the RBC which overshoots the least
+                        overshootDist=[e['rRBC'][posBifRBCsIndex]-[e['length']]*overshootsNo if sign == 1.0     
+                            else [0]*overshootsNo-e['rRBC'][posBifRBCsIndex]][0]
+                        if sign != 1.0:
+                            overshootDist = overshootDist[::-1]
+                        overshootTime=overshootDist / ([e['v']]*overshootsNo)
+        		        #Calculate position of overshootRBCs in every outEdge
+                        #the values in position are stored such that they can directly concatenated with outE['rRBC']
+                        #position = [pos_min ... pos_max]
+                        if oe['sign'] == 1.0:
+                            position1=np.array(overshootTime)*np.array([oe['v']]*overshootsNo)
+                        else:
+                            position1=np.array([oe['length']]*overshootsNo)-np.array(overshootTime[::-1])* \
+                                np.array([oe['v']]*overshootsNo)
+                        if oe2['sign'] == 1.0:
+                            position2=np.array(overshootTime)*np.array([oe2['v']]*overshootsNo)
+                        else:
+                            position2=np.array([oe2['length']]*overshootsNo)-np.array(overshootTime[::-1])* \
+                                np.array([oe2['v']]*overshootsNo)
+                        if len(outEdges) > 2:
+                            if oe3['sign'] == 1.0:
+                                position3=np.array(overshootTime)*np.array([oe3['v']]*overshootsNo)
+                            else:
+                                position3=np.array([oe3['length']]*overshootsNo)-np.array(overshootTime[::-1])* \
+                                    np.array([oe3['v']]*overshootsNo)
+                        #print('anlayse positon')
+                        #print(position1)
+                        #print(oe['length'])
+                        #print(position2)
+                        #print(oe2['length'])
+        		        #To begin with it is tried if all RBCs fit into the prefered outEdge. The time of arrival at the RBCs is take into account
+                        #RBCs which would be too close together are put into the other edge
+                        #postion2/position3 is used if there is not enough space in the prefered outEdge and hence the RBC is moved to the other outEdge
+        		        #actual position of RBCs in the outEdges
+                        positionPref3=[]
+                        positionPref2=[]
+                        positionPref1=[]
+                        #number of RBCs in the Edges
+                        countPref1=0
+                        countPref2=0
+                        countPref3=0
+                        #Loop over all movable RBCs
+                        for i in range(overshootsNo):
+                            #print('positionPref1')
+                            #print(positionPref1)
+                            index=-1*(i+1) if sign == 1.0 else i
+                            index1=-1*(i+1) if oe['sign'] == 1.0 else i
+                            index2=-1*(i+1) if oe2['sign'] == 1.0 else i
+                            #The possible number of RBCs results from the distance the first RBC overshoots
+                            #it can happen that due to that more RBCs are blocked than expected, that is checked with the following values
+                            #posRBC < 0 if the RBC does not fit into the vessel anymore
+                            posRBC1=position1[index1] if oe['sign'] == 1 else oe['length']-position1[index1]
+                            posRBC2=position2[index2] if oe2['sign'] == 1 else oe2['length']-position2[index2]
+                            if len(outEdges) > 2:
+                                index3=-1*(i+1) if oe3['sign'] == 1.0 else i
+                                posRBC3=position3[index3] if oe3['sign'] == 1 else oe3['length']-position3[index3]
+                            #check if RBC still fits into Prefered OutE
+                            #print(posNoBifEventsPref)
+                            #print(countPref1)
+                            #print(index1)
+                            #print(posRBC1)
+                            if posNoBifEventsPref > countPref1 and posRBC1 >= 0:
+                                #Check if there are RBCs present in outEPref
+                                if positionPref1 != []:
+                                    #Check if distance to preceding RBC is big enough
+                                    #print('Analyse distance check')
+                                    #print(positionPref1[-1])
+                                    #print(position1[index1])
+                                    #print(positionPref1[-(countPref1)]-position1[index1])
+                                    dist1=positionPref1[-1]-position1[index1] if oe['sign'] == 1.0 \
+                                        else position1[index1]-positionPref1[-1]
+                                    #print(dist1)
+                                    #print(oe['minDist'])
+                                    #The distance is not big enough check if RBC fits into outEPref2
+                                    if dist1 < oe['minDist']:
+                                        #if RBCs are present in the outEdgePref2
+                                        if posNoBifEventsPref2 > countPref2 and posRBC2 >= 0:
+                                            if positionPref2 != []:
+                                                #print('Analyse distance check 2')
+                                                #print(positionPref2)
+                                                #print(positionPref2[-1])
+                                                #print(position2[index2])
+                                                dist2=positionPref2[-1]-position2[index2] if oe2['sign'] == 1.0 \
+                                                    else position2[index2]-positionPref2[-1]
+                                                #print(dist2)
+                                                #print(oe2['minDist'])
+                                                #Check if there is enough space in 2nd outEdge
+        		                                #in case there is not enough space:
+                                                if dist2 < oe2['minDist']:
+                                                    #Check if there is a third outEdge
+                                                    if len(outEdges)>2:
+                                                        if posNoBifEventsPref3 > countPref3 and posRBC3 >= 0:
+                                                            #Check if there are RBCs in the third outEdge
+                                                            if positionPref3 != []:
+                                                                dist3=positionPref3[-1]-position3[index3] if oe3['sign'] == 1.0 \
+                                                                    else position3[index3]-positionPref3[-1]
+                                                                #if there is not enough space in the third outEdge
+        			                                        #Check in which edge the RBC is blocked the shortest time
+                                                                if dist3 < oe3['minDist']:
+                                                                    timeBlocked1=(oe['minDist']-dist1)/oe['v']
+                                                                    timeBlocked2=(oe2['minDist']-dist2)/oe2['v']
+                                                                    timeBlocked3=(oe3['minDist']-dist3)/oe3['v']
+                                                                    if timeBlocked1 == min(timeBlocked1,timeBlocked2,timeBlocked3):
+                                                                        if oe['sign'] == 1.0:
+                                                                            position1[index1]=positionPref1[-1]-oe['minDist']
+                                                                            if position1[index1] > 0:
+                                                                                positionPref1.append(position1[index1])
+                                                                                countPref1 += 1
+                                                                        else:
+                                                                            position1[index1]=positionPref1[-1]+oe['minDist']
+                                                                            if position1[index1] < oe['minDist']:
+                                                                                positionPref1.append(position1[index1])
+                                                                                countPref1 += 1
+                                                                    elif timeBlocked2 == min(timeBlocked1,timeBlocked2,timeBlocked3):
+                                                                        if oe2['sign'] == 1.0:
+                                                                            position2[index2]=positionPref2[-1]-oe2['minDist']
+                                                                            if position2[index2] > 0:
+                                                                                positionPref2.append(position2[index2])
+                                                                                countPref2 += 1
+                                                                        else:
+                                                                            position2[index2]=positionPref2[-1]+oe2['minDist']
+                                                                            if position2[index2] < oe2['minDist']:
+                                                                                positionPref2.append(position2[index2])
+                                                                                countPref2 += 1
+                                                                    elif timeBlocked3 == min(timeBlocked1,timeBlocked2,timeBlocked3):
+                                                                        if oe3['sign'] == 1.0:
+                                                                            position3[index3]=positionPref3[-1]-oe3['minDist']
+                                                                            if position3[index3] > 0:
+                                                                                positionPref3.append(position3[index3])
+                                                                                countPref3 += 1
+                                                                        else:
+                                                                            position3[index3]=positionPref3[-1]+oe3['minDist']
+                                                                            if position3[index3] < oe3['minDist']:
+                                                                                positionPref3.append(position3[index3])
+                                                                                countPref3 += 1
+                                                                #There is enough space in outEdge 3
+                                                                else:
+                                                                    positionPref3.append(position3[index3])
+                                                                    countPref3 += 1
+        			                                    #There are no RBCs in outEdge 3
+                                                            else:
+                                                                if oe3['sign'] == 1.0:
+                                                                    if position3[index3] > oe3['length']:
+                                                                        position3[index3]=oe3['length']
+                                                                    if len(oe3['rRBC']):
+                                                                        if oe3['rRBC'][0]-position3[index2] < oe3['minDist']:
+                                                                            position3[index3]=oe3['rRBC'][0]-oe3['minDist']
+                                                                else:
+                                                                    if position3[index3] < 0:
+                                                                        position3[index3]=0
+                                                                    if len(oe3['rRBC']):
+                                                                        if position3[index3]-oe3['rRBC'][-1] < oe3['minDist']:
+                                                                            position3[index3]=oe3['rRBC'][-1]+oe3['minDist']
+                                                                positionPref3.append(position3[index3])
+                                                                countPref3 += 1
+                                                    #There is no third outEdge, therefore it is checked in which edge the RBC is blocked
+                                                    #the shortest time
+                                                    else:
+                                                        timeBlocked1=(oe['minDist']-dist1)/oe['v']
+                                                        timeBlocked2=(oe2['minDist']-dist2)/oe2['v']
+                                                        if timeBlocked1 < timeBlocked2:
+                                                            if oe['sign'] == 1.0:
+                                                                position1[index1]=positionPref1[-1]-oe['minDist']
+                                                                if position1[index1] > 0:
+                                                                    positionPref1.append(position1[index1])
+                                                                    countPref1 += 1
+                                                            else:
+                                                                position1[index1]=positionPref1[-1]+oe['minDist']
+                                                                if position1[index1] < oe['minDist']:
+                                                                    positionPref1.append(position1[index1])
+                                                                    countPref1 += 1
+                                                        else:
+                                                            if oe2['sign'] == 1.0:
+                                                                position2[index2]=positionPref2[-1]-oe2['minDist']
+                                                                if position2[index2] > 0:
+                                                                    positionPref2.append(position2[index2])
+                                                                    countPref2 += 1
+                                                            else:
+                                                                position2[index2]=positionPref2[-1]+oe2['minDist']
+                                                                if position2[index2] < oe2['minDist']:
+                                                                    positionPref2.append(position2[index2])
+                                                                    countPref2 += 1
+                                                #there is enough space for the RBC in outEPref2
+                                                else:
+                                                    positionPref2.append(position2[index2])
+                                                    countPref2 += 1
+                                            #there are no RBCs in outEdge2
+                                            else:
+                                                if oe2['sign'] == 1.0:
+                                                    if position2[index2] > oe2['length']:
+                                                        position2[index2]=oe2['length']
+                                                    if len(oe2['rRBC']):
+                                                        if oe2['rRBC'][0]-position2[index2] < oe2['minDist']:
+                                                            position2[index2]=oe2['rRBC'][0]-oe2['minDist']
+                                                else:
+                                                    if position2[index2] < 0:
+                                                        position2[index2]=0
+                                                    if len(oe2['rRBC']):
+                                                        if position2[index2]-oe2['rRBC'][-1] < oe2['minDist']:
+                                                            position2[index2]=oe2['rRBC'][-1]+oe2['minDist']
+                                                positionPref2.append(position2[index2])
+                                                countPref2 += 1
+                                    #If the RBC fits into outEPref1
+                                    else:
+                                        positionPref1.append(position1[index1])
+                                        countPref1 += 1
+                                #There are not yet any new RBCs in outEdgePref
+                                else:
+                                    if oe['sign'] == 1.0:
+                                        if position1[index1] > oe['length']:
+                                            position1[index1]=oe['length']
+                                        if len(oe['rRBC']):
+                                            if oe['rRBC'][0]-position1[index1] < oe['minDist']:
+                                                position1[index1]=oe['rRBC'][0]-oe['minDist']
+                                    else:
+                                        if position1[index1] < 0:
+                                            position1[index1]=0
+                                        if len(oe['rRBC']):
+                                            if position1[index1]-oe['rRBC'][-1] <oe['minDist']:
+                                                position1[index1]=oe['rRBC'][-1]+oe['minDist']
+                                    positionPref1.append(position1[index1])
+                                    countPref1 += 1
+                            #The RBCs do not fit into the prefered outEdge anymore
+                            #Therefore they are either put in outEdge2 or outEdge3
+                            elif posNoBifEventsPref2 > countPref2 and posRBC2 >= 0:
+                                #Check if there are already new RBCs in outEPref2
+                                if positionPref2 != []:
+                                    #print('Analyse distance check 2')
+                                    #print(positionPref2[-1])
+                                    #print(position2[index2])
+                                    dist2=positionPref2[-1]-position2[index2] if oe2['sign'] == 1.0 \
+                                        else position2[index2]-positionPref2[-1]
+                                    #print(dist2)
+                                    #print(oe2['minDist'])
+                                    if dist2 < oe2['minDist']:
+                                        #Check if there is a third outEdge
+                                        if len(outEdges)>2:
+                                            if posNoBifEventsPref3 > countPref3 and posRBC3 >= 0:
+                                                #Check if there are RBCs in the third outEdge
+                                                if positionPref3 != []:
+                                                    dist3=positionPref3[-1]-position3[index3] if oe3['sign'] == 1.0 \
+                                                        else position3[index3]-positionPref3[-1]
+                                                    #if there is not enough space in the third outEdge
+        		        #Check in which edge the RBC is blocked the shortest time
+                                                    if dist3 < oe3['minDist']:
+                                                        timeBlocked2=(oe2['minDist']-dist2)/oe2['v']
+                                                        timeBlocked3=(oe3['minDist']-dist3)/oe3['v']
+                                                        if timeBlocked2 == min(timeBlocked1,timeBlocked2,timeBlocked3):
+                                                            if oe2['sign'] == 1.0:
+                                                                position2[index2]=positionPref2[-1]-oe2['minDist']
+                                                                if position2[index2] > 0:
+                                                                    positionPref2.append(position2[index2])
+                                                                    countPref2 += 1
+                                                            else:
+                                                                position2[index2]=positionPref2[-1]+oe2['minDist']
+                                                                if position2[index2] < oe2['minDist']:
+                                                                    positionPref2.append(position2[index2])
+                                                                    countPref2 += 1
+                                                        elif timeBlocked3 == min(timeBlocked1,timeBlocked2,timeBlocked3):
+                                                            if oe3['sign'] == 1.0:
+                                                                position3[index3]=positionPref3[-1]-oe3['minDist']
+                                                                if position3[index3] > 0:
+                                                                    positionPref3.append(position3[index3])
+                                                                    countPref3 += 1
+                                                            else:
+                                                                position3[index3]=positionPref3[-1]+oe3['minDist']
+                                                                if position3[index3] < oe3['minDist']:
+                                                                    positionPref3.append(position3[index3])
+                                                                    countPref3 += 1
+                                                    #There is enough space in outEdge 3
+                                                    else:
+                                                        positionPref3.append(position3[index3])
+                                                        countPref3 += 1
+        	                                        #There are no RBCs in outEdge 3
+                                                else:
+                                                    #Check if RBC overshooted the vessel, or runs into the preceding one (which already is in the outEdge)
+                                                    if oe3['sign'] == 1.0:
+                                                        if position3[index3] > oe3['length']:
+                                                            position3[index3]=oe3['length']
+                                                        if len(oe3['rRBC']):
+                                                            if oe3['rRBC'][0]-position3[index3] < oe3['minDist']:
+                                                                position3[index3]=oe3['rRBC'][0]-oe3['minDist']
+                                                    else:
+                                                        if position3[index3] < 0:
+                                                            position3[index3]=0
+                                                        if len(oe3['rRBC']):
+                                                            if position3[index3]-oe3['rRBC'][-1] < oe3['minDist']:
+                                                                position3[index3]=oe3['rRBC'][-1]+oe3['minDist']
+                                                    positionPref3.append(position3[index3])
+                                                    countPref3 += 1
+                                        #There is no third outEdge
+                                        #The RBCs are positioned such that there is no overlap
+                                        else:
+                                            if oe2['sign'] == 1.0:
+                                                position2[index2]=positionPref2[-1]-oe2['minDist']
+                                                if position2[index2] > 0:
+                                                    positionPref2.append(position2[index2])
+                                                    countPref2 += 1
+                                            else:
+                                                position2[index2]=positionPref2[-1]+oe2['minDist']
+                                                if position2[index2] < oe2['minDist']:
+                                                    positionPref2.append(position2[index2])
+                                                    countPref2 += 1
+                                    #There is enough space for the RBCs in the outEdge 2
+                                    else:
+                                        positionPref2.append(position2[index2])
+                                        countPref2 += 1
+                                #There are not yet any RBCs in outEdge 2
+                                else:
+                                    if oe2['sign'] == 1.0:
+                                        if position2[index2] > oe2['length']:
+                                            position2[index2]=oe2['length']
+                                        if len(oe2['rRBC']):
+                                            if oe2['rRBC'][0]-position2[index2] < oe2['minDist']:
+                                                position2[index2]=oe2['rRBC'][0]-oe2['minDist']
+                                    else:
+                                        if position2[index2] < 0:
+                                            position2[index2]=0
+                                        if len(oe2['rRBC']):
+                                            if position2[index2]-oe2['rRBC'][-1] < oe2['minDist']:
+                                                position2[index2]=oe2['rRBC'][-1]+oe2['minDist']
+                                    positionPref2.append(position2[index2])
+                                    countPref2 += 1                                       
+                            else:
+                                #Check if there is a third outEdge
+                                if len(outEdges)>2:
+                                    #Check if there are RBCs in the third outEdge
+                                    if posNoBifEventsPref3 > countPref3 and posRBC3 >= 0:
+                                        if positionPref3 != []:
+                                            dist3=positionPref3[-1]-position3[index3] if oe3['sign'] == 1.0 \
+                                                else position3[index3]-positionPref3[-1]
+                                            #if there is not enough space in the third outEdge
+                                            if dist3 < oe3['minDist']:
+                                                if oe3['sign'] == 1.0:
+                                                    position3[index3]=positionPref3[-1]-oe3['minDist']
+                                                    if position3[index3] > 0:
+                                                        positionPref3.append(position3[index3])
+                                                        countPref3 += 1
+                                                else:
+                                                    position3[index3]=positionPref3[-1]+oe3['minDist']
+                                                    if position3[index3] < oe3['minDist']:
+                                                        positionPref3.append(position3[index3])
+                                                        countPref3 += 1
+                                            #There is enough space in outEdge 3
+                                            else:
+                                                positionPref3.append(position3[index3])
+                                                countPref3 += 1
+                                        #There are no RBCs in outEdge 3
+                                        else:
+                                            if oe3['sign'] == 1.0:
+                                                if position3[index3] > oe3['length']:
+                                                    position3[index3]=oe3['length']
+                                                if len(oe3['rRBC'])>0:
+                                                    if oe3['rRBC'][0]-position3[index3] < oe3['minDist']:
+                                                        position3[index3]=oe3['rRBC'][0]-oe3['minDist']
+                                            else:
+                                                if position3[index3] < 0:
+                                                    position3[index3]=0
+                                                if len(oe3['rRBC'])>0:
+                                                    if position3[index3]-oe3['rRBC'][-1] < oe3['minDist']:
+                                                        position3[index3]=oe3['rRBC'][-1]+oe3['minDist']
+                                            positionPref3.append(position3[index3])
+                                            countPref3 += 1
+                                else:
+                                    pass
+                        #Add rbcs to outEPref       
+                        if len(outEdges) > 2:
+                            if countPref2+countPref1+countPref3 != overshootsNo:
+                                #print('WARNING OVERSHOOTSNO IS CORRECTED')
+                                #print(overshootsNo)
+                                overshootsNo = countPref2+countPref1+countPref3
+                                #print(overshootsNo)
+                        else:
+                            if countPref2+countPref1 != overshootsNo:
+                                #print('WARNING OVERSHOOTSNO IS CORRECTED')
+                                #print(overshootsNo)
+                                overshootsNo = countPref2+countPref1
+                                #print(overshootsNo)
+                        #rbcMoved calculates number of RBCs moved per timestep
+                        rbcMoved += overshootsNo
+                        rbcsMovedPerEdge.append(overshootsNo)
+                        if oe['sign'] == 1.0:
+                            #print('CHECK CONCATENATE divV')
+                            #print(positionPref1)
+                            #print(oe['sign'])
+                            #print(oe['rRBC'])
+                            oe['rRBC']=np.concatenate([positionPref1[::-1], oe['rRBC']])
+                            #print(oe['rRBC'])
+                            #print(outEPref)
+                        else:
+                            #print('CHECK CONCATENATE divV')
+                            #print(positionPref1)
+                            ##print(oe['rRBC'])
+                            #print(oe['sign'])
+                            oe['rRBC']=np.concatenate([oe['rRBC'],positionPref1])
+                            #print(oe['rRBC'])
+                            #print(outEPref)
+                        if len(oe['rRBC']) > oe['nMax']:
+                            print('ERROR NEW 2')
+                            print(len(oe['rRBC']))
+                            print(oe['nMax'])
+                            print(outEPref2)
+                        #Add rbcs to outEPref2       
+                        if oe2['sign'] == 1.0:
+                            #print('CHECK CONCATENATE divV')
+                            #print(positionPref2)
+                            #print(oe2['sign'])
+                            #print(oe2['rRBC'])
+                            oe2['rRBC']=np.concatenate([positionPref2[::-1], oe2['rRBC']])
+                            #print(oe2['rRBC'])
+                            #print(outEPref2)
+                        else:
+                            #print('CHECK CONCATENATE divV')
+                            #print(positionPref2)
+                            #print(oe2['sign'])
+                            #print(oe2['rRBC'])
+                            oe2['rRBC']=np.concatenate([oe2['rRBC'],positionPref2])
+                            #print(oe2['rRBC'])
+                            #print(outEPref2)
+                        if len(oe2['rRBC']) > oe2['nMax']:
+                            print('ERROR NEW 3')
+                            print(len(oe2['rRBC']))
+                            print(oe2['nMax'])
+                            print(outEPref2)
+                        if len(outEdges) >2:
+                        #Add rbcs to outEPref3       
+                            if oe3['sign'] == 1.0:
+                                #print('CHECK CONCATENATE divV')
+                                #print(positionPref3)
+                                #print(oe3['rRBC'])
+                                oe3['rRBC']=np.concatenate([positionPref3[::-1], oe3['rRBC']])
+                                #print(oe3['rRBC'])
+                                #print(outEPref3)
+                            else:
+                                #print('CHECK CONCATENATE divV')
+                                #print(positionPref3)
+                                #print(oe3['rRBC'])
+                                oe3['rRBC']=np.concatenate([oe3['rRBC'],positionPref3])
+                                #print(oe3['rRBC'])
+                                #print(outEPref3)
+                            if len(oe3['rRBC']) > oe3['nMax']:
+                                print('ERROR NEW 3b')
+                                print(len(oe3['rRBC']))
+                                print(oe3['nMax'])
+                                print(outEPref3)
+                        #Remove RBCs from old Edge
+                        if overshootsNo > 0:
+                            if sign == 1.0:
+                                e['rRBC']=e['rRBC'][:-overshootsNo]
+                            else:
+                                e['rRBC']=e['rRBC'][overshootsNo::]
+                        #Recheck if the distance between the newly introduces RBCs is still big enough
+                        #TODO:  not really needed needed
+                        #outEPref
+                        #print('Recheck RBCs')
+                        #print(oe['rRBC'])
+                        #print(oe['sign'])
+                        #print(positionPref1)
+                        #print(oe['minDist'])
+                        if len(oe['rRBC']) > 0:
+                            if len(positionPref1) == len(oe['rRBC']):
+                                if oe['sign'] == 1.0:
+                                    iter=len(positionPref1)-2
+                                    if oe['rRBC'][-1] > oe['length']:
+                                       oe['rRBC'][-1]=oe['length']
+                                else:               
+                                    iter=len(positionPref1)-1                
+                                    if oe['rRBC'][0] < 0:
+                                        oe['rRBC'][0]=0
+                                #print(oe['rRBC'])
+                            else:
+                                if oe['sign']==1.0:
+                                    iter=len(positionPref1)-1
+                                else:
+                                    iter=len(positionPref1)
+                            #print(iter)
+                            if oe['sign']==1.0:
+                                for i in range(iter,-1,-1):
+                                    if oe['rRBC'][i+1]-oe['rRBC'][i] < oe['minDist'] \
+                                        or oe['rRBC'][i+1]-oe['rRBC'][i] < 0:
+                                        oe['rRBC'][i]=oe['rRBC'][i+1]-oe['minDist']
+                            else:
+                                for i in range(-1*iter,0,1):
+                                    if oe['rRBC'][i]-oe['rRBC'][i-1] < oe['minDist'] \
+                                        or oe['rRBC'][i]-oe['rRBC'][i-1] < 0:          
+                                        oe['rRBC'][i]=oe['rRBC'][i-1]+oe['minDist']
+                        #print(oe['minDist'])
+                        #print('After position ReCheck')
+                        #print(oe['rRBC'])
+                        #outEPref2
+                        #print('Recheck RBCs 2')
+                        #print(oe2['rRBC'])
+                        #print(oe2['sign'])
+                        #print(positionPref2)
+                        #print(oe2['minDist'])
+                        if len(oe2['rRBC']) > 0:
+                            if len(positionPref2) == len(oe2['rRBC']):
+                                if oe2['sign'] == 1.0:
+                                    iter=len(positionPref2)-2
+                                    if oe2['rRBC'][-1] > oe2['length']:
+                                        oe2['rRBC'][-1]=oe2['length']
+                                else:               
+                                    iter=len(positionPref2)-1                
+                                    if oe2['rRBC'][0] < 0:
+                                        oe2['rRBC'][0]=0
+                                #print(oe2['rRBC'])
+                            else:
+                                if oe2['sign']==1.0:
+                                    iter=len(positionPref2)-1
+                                else:
+                                    iter=len(positionPref2)
+                            #print(iter)
+                            if oe2['sign']==1.0:
+                                for i in range(iter,-1,-1):
+                                    if oe2['rRBC'][i+1]-oe2['rRBC'][i] < oe2['minDist'] \
+                                        or oe2['rRBC'][i+1]-oe2['rRBC'][i] < 0:
+                                        oe2['rRBC'][i]=oe2['rRBC'][i+1]-oe2['minDist']
+                            else:
+                                for i in range(-1*iter,0,1):
+                                    if oe2['rRBC'][i]-oe2['rRBC'][i-1] < oe2['minDist'] \
+                                        or oe2['rRBC'][i]-oe2['rRBC'][i-1] < 0:          
+                                        oe2['rRBC'][i]=oe2['rRBC'][i-1]+oe2['minDist']
+                        #outEPref3
+                        if len(outEdges)>2:
+                            if len(oe3['rRBC']) > 0:
+                                if len(positionPref3) == len(oe3['rRBC']):
+                                    if oe3['sign'] == 1.0:
+                                        iter=len(positionPref3)-2
+                                        if oe3['rRBC'][-1] > oe3['length']:
+                                            oe3['rRBC'][-1]=oe3['length']
+                                    else:               
+                                        iter=len(positionPref3)-1                
+                                        if oe3['rRBC'][0] < 0:
+                                            oe3['rRBC'][0]=0
+                                    #print(oe3['rRBC'])
+                                else:
+                                    if oe3['sign']==1.0:
+                                        iter=len(positionPref3)-1
+                                    else:
+                                        iter=len(positionPref3)
+                                #print(iter)
+                                if oe3['sign']==1.0:
+                                    for i in range(iter,-1,-1):
+                                        if oe3['rRBC'][i+1]-oe3['rRBC'][i] < oe3['minDist'] \
+                                            or oe3['rRBC'][i+1]-oe3['rRBC'][i] < 0:
+                                            oe3['rRBC'][i]=oe3['rRBC'][i+1]-oe3['minDist']
+                                else:
+                                    for i in range(-1*iter,0,1):
+                                        if oe3['rRBC'][i]-oe3['rRBC'][i-1] < oe3['minDist'] \
+                                            or oe3['rRBC'][i]-oe3['rRBC'][i-1] < 0:          
+                                            oe3['rRBC'][i]=oe3['rRBC'][i-1]+oe3['minDist']
+                    #Deal with RBCs which could not be reassigned to the new edge because of a traffic jam
+                    noStuckRBCs=len(bifRBCsIndex)-overshootsNo
+                    #if noStuckRBCs > 0:
+                        #print('Recheck stuck RBCs')
+                        #print(noStuckRBCs)
+                        #print(e.index)
+                        #print(e['rRBC'])
+                    for i in range(noStuckRBCs):
+                        index=-1*(i+1) if sign == 1.0 else i
+                        e['rRBC'][index]=e['length']-i*e['minDist'] if sign == 1.0 else 0+i*e['minDist']
+                    #Recheck if the distance between the newly introduces RBCs is still big enough 
+                    if len(e['rRBC']) >1:
+                        moved = 0
+                        count = 0
+                        if sign == 1.0:
+                            for i in range(-1,-1*(len(e['rRBC'])),-1):
+                                index=i-1
+                                if e['rRBC'][i] < e['rRBC'][index] or abs(e['rRBC'][i]-e['rRBC'][index]) < e['minDist']:
+                                    e['rRBC'][index]=e['rRBC'][i]-e['minDist']
+                                    moved = 1
+                                else:
+                                    moved = 0
+                                count += 1
+                                if count >= noStuckRBCs and moved == 0:
+                                    break
+                        else:
+                            for i in range(len(e['rRBC'])-1):
+                                index=i+1
+                                if e['rRBC'][i] > e['rRBC'][index] or abs(e['rRBC'][i]-e['rRBC'][index]) < e['minDist']:
+                                    e['rRBC'][index]=e['rRBC'][i]+e['minDist']
+                                    moved = 1
+                                else:
+                                    moved = 0
+                                count += 1
+                                if count >= noStuckRBCs+1 and moved == 0:
+                                    break
+        
+        
+    #-------------------------------------------------------------------------------------------
+            #if vertex is convergent vertex
+                elif G.vs[vi]['vType'] == 4:
+                    #print('it is a convergent bifurcation')
+                    bifRBCsIndex1=bifRBCsIndex
+                    noBifEvents1=noBifEvents
+                    outE=G.vs[vi]['outflowE'][0]
+                    oe = G.es[outE]
+                    inflowEdges=G.vs[vi]['inflowE']
+                    k=0
+                    for i in inflowEdges:
+                        if i == e.index:
+                            inE1=e.index
+                        else:
+                            if k == 0:
+                                inE2=i
+                                k = 1
+                            else:
+                                inE3=i
+                    convEdges2.append(inE2)
+                    e2=G.es[inE2]
+                    #Check if httBC exists
+                    if e2['httBC'] is not None:
+                        #print('Check adding RBCs')
+                        #print(e2.index)
+                        #print(e2['minDist'])
+                        rRBC = []
+                        lrbc = e2['minDist']
+                        htt = e2['httBC']
+                        length = e2['length']
+                        cum_length =  e2['v'] * dt
+                        if len(e2['rRBC']) > 0:
+                            distToFirst=e2['rRBC'][0] if e2['sign']==1.0 else e2['length']-e2['rRBC'][-1]
+                            if cum_length > distToFirst:
+                                cum_length = distToFirst
+                        if cum_length >= lrbc:
+                            nrbc_max = cum_length / lrbc
+                            #print(nrbc_max)
+                            nrbc_max_floor = np.floor(nrbc_max)
+                            #print(nrbc_max_floor)
+                            #nrbc = sum(np.random.rand(nrbc_max_floor)<htt)
+                            #number of RBCs randomly chosen to average htt
+                            nrbc = int(np.round((np.random.rand(1)[0]+0.5)*htt*nrbc_max_floor))
+                            lrbc_modulo = (nrbc_max - nrbc_max_floor) * lrbc
+                            start = 0-lrbc
+                            stop = cum_length
+                            rands=np.random.rand(nrbc)
+                            for i in range(nrbc):
+                                #pos = rands[i] * (stop - ((nrbc-i)*lrbc) - start) + start
+                                pos = start + lrbc +rands[i]*lrbc_modulo
+                                start = pos
+                                lrbc_modulo = lrbc_modulo - rands[i]*lrbc_modulo
+                                rRBC.append(pos)
+                            rRBC = np.array(rRBC)
+                            #print(nRBC)
+                            ##print(rRBC)
+                            if e2['sign'] == 1:
+                                #print('RBCs added at Input')
+                                ##print(e2['rRBC'])
+                                e2['rRBC'] = np.concatenate([rRBC, e2['rRBC']])
+                                ##print(e2['rRBC'])
+                                vertexUpdate.append(e2.target)
+                                vertexUpdate.append(e2.source)
+                                edgeUpdate.append(inE2)
+                            else:
+                                #print('RBCs added at Input')
+                                ##print(e2['rRBC'])
+                                e2['rRBC'] = np.concatenate([e2['rRBC'], length-rRBC[::-1]])
+                                ##print(e2['rRBC'])
+                                vertexUpdate.append(e2.target)
+                                vertexUpdate.append(e2.source)
+                                edgeUpdate.append(inE2)
+                    #If RBCs are present move all RBCs in inEdge2
+                    if len(e2['rRBC']) > 0:
+                        e2['rRBC'] = e2['rRBC'] + e2['v'] * dt * e2['sign']
+                        bifRBCsIndex2=[]
+                        nRBC2=len(e2['rRBC'])
+                        if e2['sign'] == 1.0:
+                            if e2['rRBC'][-1] > e2['length']:
+                                for i,j in enumerate(e2['rRBC'][::-1]):
+                                    if j > e2['length']:
+                                        bifRBCsIndex2.append(nRBC2-1-i)
+                                    else:
+                                        break
+                            bifRBCsIndex2=bifRBCsIndex2[::-1]
+                            #bifRBCsIndex=[ i for (i,j) in enumerate(e['rRBC']) if j >= e['length'] ]
+        
+        
+                        else:
+                            if e2['rRBC'][0] < 0:
+                                for i,j in enumerate(e2['rRBC']):
+                                    if j < 0:
+                                        bifRBCsIndex2.append(i)
+                                    else:
+                                        break
+                        #if e2['sign'] == 1.0:
+                        #    bifRBCsIndex2=[ i for (i,j) in enumerate(e2['rRBC']) if j >= e2['length'] ]
+                        #else:
+                        #    bifRBCsIndex2=[ i for (i,j) in enumerate(e2['rRBC']) if j <= 0 ]
+                        noBifEvents2=len(bifRBCsIndex2)
+                    else:
+                        noBifEvents2=0
+                        bifRBCsIndex2=[]
+                    sign2=e2['sign']
+                    #Check if there is a third inEdge
+                    if len(inflowEdges) > 2:
+                        convEdges2.append(inE3)
+                        e3=G.es[inE3]
+                        #Check if httBC exists
+                        if e3['httBC'] is not None:
+                            #print('Check adding RBCs')
+                            #print(e3.index)
+                            #print(e3['minDist'])
+                            rRBC = []
+                            lrbc = e3['minDist']
+                            htt = e3['httBC']
+                            length = e3['length']
+                            cum_length =  e3['v'] * dt
+                            if len(e3['rRBC']) > 0:
+                                distToFirst=e3['rRBC'][0] if e3['sign']==1.0 else e3['length']-e3['rRBC'][-1]
+                                if cum_length > distToFirst:
+                                    cum_length = distToFirst
+                            if cum_length >= lrbc:
+                                nrbc_max = cum_length / lrbc
+                                #print(nrbc_max)
+                                nrbc_max_floor = np.floor(nrbc_max)
+                                #print(nrbc_max_floor)
+                                #nrbc = sum(np.random.rand(nrbc_max_floor)<htt)
+                                #number of RBCs randomly chosen to average htt
+                                nrbc = int(np.round((np.random.rand(1)[0]+0.5)*htt*nrbc_max_floor))
+                                lrbc_modulo = (nrbc_max - nrbc_max_floor) * lrbc
+                                start = 0-lrbc
+                                stop = cum_length
+                                rands=np.random.rand(nrbc)
+                                for i in range(nrbc):
+                                    #pos = rands[i] * (stop - ((nrbc-i)*lrbc) - start) + start
+                                    pos = start + lrbc +rands[i]*lrbc_modulo
+                                    start = pos
+                                    lrbc_modulo = lrbc_modulo - rands[i]*lrbc_modulo
+                                    rRBC.append(pos)
+                                rRBC = np.array(rRBC)
+                                #print(nRBC)
+                                ##print(rRBC)
+                                if e3['sign'] == 1:
+                                    #print('RBCs added at Input')
+                                    ##print(e3['rRBC'])
+                                    e3['rRBC'] = np.concatenate([rRBC, e3['rRBC']])
+                                    ##print(e3['rRBC'])
+                                    vertexUpdate.append(e3.target)
+                                    vertexUpdate.append(e3.source)
+                                    edgeUpdate.append(inE3)
+                                else:
+                                    #print('RBCs added at Input')
+                                    ##print(e3['rRBC'])
+                                    e3['rRBC'] = np.concatenate([e3['rRBC'], length-rRBC[::-1]])
+                                    ##print(e3['rRBC'])
+                                    vertexUpdate.append(e3.target)
+                                    vertexUpdate.append(e3.source)
+                                    edgeUpdate.append(inE3)
+                        #If RBCs are present move all RBCs in inEdge3
+                        if len(e3['rRBC']) > 0:
+                            e3['rRBC'] = e3['rRBC'] + e3['v'] * dt * e3['sign']
+                            bifRBCsIndex3=[]
+                            nRBC3=len(e3['rRBC'])
+                            if e3['sign'] == 1.0:
+                                if e3['rRBC'][-1] > e3['length']:
+                                    for i,j in enumerate(e3['rRBC'][::-1]):
+                                        if j > e3['length']:
+                                            bifRBCsIndex3.append(nRBC3-1-i)
+                                        else:
+                                            break
+                                bifRBCsIndex3=bifRBCsIndex3[::-1]
+                                #bifRBCsIndex=[ i for (i,j) in enumerate(e['rRBC']) if j >= e['length'] ]
+                            else:
+                                if e3['rRBC'][0] < 0:
+                                    for i,j in enumerate(e3['rRBC']):
+                                        if j < 0:
+                                            bifRBCsIndex3.append(i)
+                                        else:
+                                            break
+                            #if e3['sign'] == 1.0:
+                            #    bifRBCsIndex3=[ i for (i,j) in enumerate(e3['rRBC']) if j >= e3['length'] ]
+                            #else:
+                            #    bifRBCsIndex3=[ i for (i,j) in enumerate(e3['rRBC']) if j <= 0 ]
+                            noBifEvents3=len(bifRBCsIndex3)
+                        else:
+                            bifRBCsIndex3=[]
+                            noBifEvents3=0
+                        sign3=e3['sign']
+        
+                    #Calculate distance to first RBC in outEdge
+                    if len(G.es[outE]['rRBC']) > 0:
+                        distToFirst=G.es[outE]['rRBC'][0] if G.es[outE]['sign'] == 1.0 else G.es[outE]['length']-G.es[outE]['rRBC'][-1]
+                    else:
+                        distToFirst=G.es[outE]['length']
+                    posNoBifEvents=int(np.floor(distToFirst/G.es[outE]['minDist']))
+                    if posNoBifEvents + len(G.es[outE]['rRBC']) > G.es[outE]['nMax']:
+                        posNoBifEvents = G.es[outE]['nMax'] - len(G.es[outE]['rRBC'])
+                    #If bifurcations are possible check how many overshoots there are at the inEdges
+                    if posNoBifEvents > 0:
+                        #overshootDist starts with the RBC which overshoots the least
+                        overshootDist1=[e['rRBC'][bifRBCsIndex1]-[e['length']]*noBifEvents1 if sign == 1.0     
+                            else [0]*noBifEvents1-e['rRBC'][bifRBCsIndex1]][0]
+                        if sign != 1.0:
+                            overshootDist1 = overshootDist1[::-1]
+                        overshootTime1=np.array(overshootDist1 / ([e['v']]*noBifEvents1))
+                        dummy1=np.array([1]*len(overshootTime1))
+                        if noBifEvents2 > 0:
+                            #overshootDist starts with the RBC which overshoots the least
+                            overshootDist2=[e2['rRBC'][bifRBCsIndex2]-[e2['length']]*noBifEvents2 if sign2 == 1.0
+                                else [0]*noBifEvents2-e2['rRBC'][bifRBCsIndex2]][0]
+                            if sign2 != 1.0:
+                                overshootDist2 = overshootDist2[::-1]
+                            overshootTime2=np.array(overshootDist2)/ np.array([e2['v']]*noBifEvents2)
+                            dummy2=np.array([2]*len(overshootTime2))
+                        else:
+                            overshootDist2=[]
+                            overshootTime2=[]
+                            dummy2=[]
+                        if len(inflowEdges) > 2:
+                            if noBifEvents3 > 0:
+                                overshootDist3=[e3['rRBC'][bifRBCsIndex3]-[e3['length']]*noBifEvents3 if sign3 == 1.0
+                                    else [0]*noBifEvents3-e3['rRBC'][bifRBCsIndex3]][0]
+                                if sign3 != 1.0:
+                                    overshootDist3 = overshootDist3[::-1]
+                                overshootTime3=np.array(overshootDist3)/ np.array([e3['v']]*noBifEvents3)
+                                dummy3=np.array([3]*len(overshootTime3))
+                            else:
+                                overshootDist3=[]
+                                overshootTime3=[]
+                                dummy3=[]
+                        else:
+                            overshootDist3=[]
+                            overshootTime3=[]
+                            dummy3=[]
+                        #print('overshootDists')
+                        #print(overshootDist1)
+                        #print(overshootDist2)
+                        #print(overshootDist3)
+                        overshootTimes=zip(np.concatenate([overshootTime1,overshootTime2,overshootTime3]),np.concatenate([dummy1,dummy2,dummy3]))
+                        #print(overshootTimes)
+                        overshootTimes.sort()
+                        overshootTime=[]
+                        inEdge=[]
+                        count1=0
+                        count2=0
+                        count3=0
+                        if posNoBifEvents > len(overshootTimes):
+                            overshootsNo=int(len(overshootTimes))
+                        else:
+                            overshootsNo=int(posNoBifEvents)
+                        #position rbcs based on when they appear at bifurcation
+                        for i in range(-1*overshootsNo,0):
+                            overshootTime.append(overshootTimes[i][0])
+                            inEdge.append(overshootTimes[i][1])
+                           # if overshootTimes[i][1] == 1:
+                           #     count1 += 1
+                           # elif overshootTimes[i][1] == 2:
+                           #     count2 += 1
+                           # elif overshootTimes[i][1] == 3:
+                           #     count3 += 1
+                        count1=inEdge.count(1)
+                        count2=inEdge.count(2)
+                        count3=inEdge.count(3)
+                        position=np.array(overshootTime)*np.array([G.es[outE]['v']]*overshootsNo)
+                        #print('position')
+                        #print(position)
+                        #print(overshootTime)
+                        #Check if RBCs are to close to each other
+                        #Check if the RBCs overshooted the vessel
+                        if position[-1] > G.es[outE]['length']:
+                            position[-1]=G.es[outE]['length']
+                        #Check if the RBCs runs into an old one in the vessel
+                        if len(G.es[outE]['rRBC']) > 0:
+                            if G.es[outE]['sign'] == 1.0:
+                                if position[-1] > G.es[outE]['rRBC'][0]-G.es[outE]['minDist']:
+                                    position[-1]=G.es[outE]['rRBC'][0]-G.es[outE]['minDist']
+                            else:
+                                if G.es[outE]['length']-position[-1] < G.es[outE]['rRBC'][-1]+G.es[outE]['minDist']:
+                                    position[-1]=G.es[outE]['length']-(G.es[outE]['rRBC'][-1]+G.es[outE]['minDist'])
+                        #print('First position check') 
+                        #print(position)
+                        #print('Check position')
+                        #print(G.es[outE]['minDist'])
+                        #print(count1+count2+count3)
+                        for i in range(-1,-1*(count1+count2+count3),-1):
+                            #print('')
+                            #print(i)
+                            #print(position[i])
+                            #print(position[i-1])
+                            #print(position[i]-position[i-1])
+                            if position[i]-position[i-1] < G.es[outE]['minDist'] or \
+                                position[i-1] > position[i]:
+                                position[i-1]=position[i]-G.es[outE]['minDist']
+                        #if first RBC did not yet move enough less than the possible no of RBCs fit into the outEdge
+                        for i in range(count1+count2+count3):
+                            if position[i] < 0:
+                                #print('a RBC has been pushed out of the outEdge')
+                                if inEdge[i] == 1:
+                                    count1 += -1
+                                elif inEdge[i] == 2:
+                                    count2 += -1
+                                elif inEdge[i] == 3:
+                                    count3 += -1
+                            else:
+                                break
+                        position=position[i::]
+                        #Add rbcs to outE       
+                        if G.es[outE]['sign'] == 1.0:
+                            #print('CHECK CONCATENATE conV')
+                            #print(position)
+                            #print(G.es[outE]['sign'])
+                            #print(G.es[outE]['rRBC'])
+                            G.es[outE]['rRBC']=np.concatenate([position, G.es[outE]['rRBC']])
+                            #print(G.es[outE]['rRBC'])
+                            #print(outE)
+                        else:
+                            #print('CHECK CONCATENATE conV')
+                            #print(position)
+                            #print(G.es[outE]['sign'])
+                            #print(G.es[outE]['rRBC'])
+                            position = [G.es[outE]['length']]*len(position) - position[::-1]
+                            G.es[outE]['rRBC']=np.concatenate([G.es[outE]['rRBC'],position])
+                            #print(G.es[outE]['rRBC'])
+                            #print(outE)
+                        if len(G.es[outE]['rRBC']) > G.es[outE]['nMax']:
+                            print('ERROR NEW 4')
+                            print(len(G.es[outE]['rRBC']))
+                            print(G.es[outE]['nMax'])
+                        #Remove RBCs from old Edge 1
+                        if count1 > 0:
+                            if sign == 1.0:
+                                e['rRBC']=e['rRBC'][:-count1]
+                            else:
+                                e['rRBC']=e['rRBC'][count1::]
+                        if noBifEvents2 > 0 and count2 > 0:
+                            #Remove RBCs from old Edge 2
+                            if sign2 == 1.0:
+                                e2['rRBC']=e2['rRBC'][:-count2]
+                            else:
+                                e2['rRBC']=e2['rRBC'][count2::]
+                        if len(inflowEdges) > 2:
+                            if noBifEvents3 > 0 and count3 > 0:
+                                #Remove RBCs from old Edge 3
+                                if sign3 == 1.0:
+                                    e3['rRBC']=e3['rRBC'][:-count3]
+                                else:
+                                    e3['rRBC']=e3['rRBC'][count3::]
+        
+                        #Recheck if the distance between the newly introduces RBCs is still big enough
+                        #outE
+                        rbcMoved += count1 + count2 + count3
+                        rbcsMovedPerEdge.append(count1+count2+count3)
+                        #TODO here it is check if one RBC overshoots the whole vessel
+                        #print('Recheck Array Position')
+                        ##print(G.es[outE]['rRBC'])
+                        #print(G.es[outE]['sign'])
+                        #print(len(position))
+                        #if len(G.es[outE]['rRBC']) > 0:
+                        #    if len(position) == len(G.es[outE]['rRBC']):
+                        #        if G.es[outE]['sign'] == 1.0:
+                        #            iter=len(position)-2
+                        #            if G.es[outE]['rRBC'][-1] > G.es[outE]['length']:
+                        #                G.es[outE]['rRBC'][-1]=G.es[outE]['length']
+                        #        else:               
+                        #            iter=len(position)-1                
+                        #            if G.es[outE]['rRBC'][0] < 0:
+                        #                G.es[outE]['rRBC'][0]=0
+                        #    else:
+                        #        if G.es[outE]['sign']==1.0:
+                        #            iter=len(position)-1
+                        #        else:
+                        #            iter=len(position)
+                        #    #print('iter')
+                        #    #print(iter)
+                        #    if G.es[outE]['sign']==1.0:
+                        #        for i in range(iter,-1,-1):
+                        #            if G.es[outE]['rRBC'][i+1]-G.es[outE]['rRBC'][i] < G.es[outE]['minDist'] \
+                        #                or G.es[outE]['rRBC'][i+1]-G.es[outE]['rRBC'][i] < 0:
+                        #                G.es[outE]['rRBC'][i]=G.es[outE]['rRBC'][i+1]-G.es[outE]['minDist']
+                        #    else:
+                        #        for i in range(-1*iter,0,1):
+                        #            if G.es[outE]['rRBC'][i]-G.es[outE]['rRBC'][i-1] < G.es[outE]['minDist'] \
+                        #                or G.es[outE]['rRBC'][i]-G.es[outE]['rRBC'][i-1] < 0:          
+                        #                G.es[outE]['rRBC'][i]=G.es[outE]['rRBC'][i-1]+G.es[outE]['minDist']
+        
+        
+                    else:
+                        count1=0
+                        count2=0
+                        count3=0
+                    #Deal with RBCs which could not be reassigned to the new edge because of a traffic jam
+                    #InEdge 1
+                    #print('Deal with stuck RBCs')
+                    noStuckRBCs1=len(bifRBCsIndex1)-count1 
+                    #print(noStuckRBCs1)
+                    #if noStuckRBCs1 > 0:
+                        #print('Deal with stuck RBCs1')
+                        #print(noStuckRBCs1)
+                        #print(e['sign'])
+                        #print(e['rRBC'])
+                    for i in range(noStuckRBCs1):
+                        index=-1*(i+1) if sign == 1.0 else i
+                        e['rRBC'][index]=e['length']-i*e['minDist'] if sign == 1.0 else 0+i*e['minDist']
+                    #print(e['rRBC'])
+                    #Recheck if the distance between the newly introduces RBCs is still big enough 
+                    if len(e['rRBC']) >1.0:
+                        moved = 0
+                        count = 0
+                        if sign == 1.0:
+                            for i in range(-1,-1*(len(e['rRBC'])),-1):
+                                index=i-1
+                                if e['rRBC'][i] < e['rRBC'][index] or abs(e['rRBC'][i]-e['rRBC'][index]) < e['minDist']:
+                                    e['rRBC'][index]=e['rRBC'][i]-e['minDist']
+                                    moved = 1
+                                else:
+                                    moved = 0
+                                count += 1
+                                if count >= noStuckRBCs1 and moved == 0:
+                                    break
+                        else:
+                            for i in range(len(e['rRBC'])-1):
+                                index=i+1
+                                if e['rRBC'][i] > e['rRBC'][index] or abs(e['rRBC'][i]-e['rRBC'][index]) < e['minDist']:
+                                    e['rRBC'][index]=e['rRBC'][i]+e['minDist']
+                                    moved = 1
+                                else:
+                                    moved = 0
+                                count += 1
+                                if count >= noStuckRBCs1+1 and moved == 0:
+                                    break
+                        #print(e['rRBC'])
+                    #Deal with RBCs which could not be reassigned to the new edge because of a traffic jam
+                    #InEdge 2
+                    #print('Deal with stuck RBCs')
+                    noStuckRBCs2=len(bifRBCsIndex2)-count2
+                    #if noStuckRBCs2 > 0:
+                        #print('Deal with stuck RBCs2')
+                        #print(noStuckRBCs2)
+                        #print(e2['sign'])
+                        #print(e2['rRBC'])
+                    #print(noStuckRBCs2)
+                    for i in range(noStuckRBCs2):
+                        index=-1*(i+1) if sign2 == 1.0 else i
+                        e2['rRBC'][index]=e2['length']-i*e2['minDist'] if sign2 == 1.0 else 0+i*e2['minDist']
+                    #print(e2['rRBC'])
+                    #Recheck if the distance between the newly introduces RBCs is still big enough 
+                    if len(e2['rRBC']) >1:
+                        moved = 0
+                        count = 0
+                        if sign2 == 1.0:
+                            for i in range(-1,-1*(len(e2['rRBC'])),-1):
+                                index=i-1
+                                if e2['rRBC'][i] < e2['rRBC'][index] or abs(e2['rRBC'][i]-e2['rRBC'][index]) < e2['minDist']:
+                                    e2['rRBC'][index]=e2['rRBC'][i]-e2['minDist']
+                                    moved = 1
+                                else:
+                                    moved = 0
+                                count += 1
+                                if count >= noStuckRBCs2 and moved == 0:
+                                    break
+                        else:
+                            for i in range(len(e2['rRBC'])-1):
+                                index=i+1
+                                if e2['rRBC'][i] > e2['rRBC'][index] or abs(e2['rRBC'][i]-e2['rRBC'][index]) < e2['minDist']:
+                                    e2['rRBC'][index]=e2['rRBC'][i]+e2['minDist']
+                                    moved = 1
+                                else:
+                                    moved = 0
+                                count += 1
+                                if count >= noStuckRBCs2+1 and moved == 0:
+                                    break
+                        #print(e2['rRBC'])
+                    #Deal with RBCs which could not be reassigned to the new edge because of a traffic jam
+                    #InEdge 3
+                    if len(inflowEdges) > 2:
+                        #if noBifEvents3 > 0:
+                            #print('Deal with stuck RBCs')
+                            noStuckRBCs3=len(bifRBCsIndex3)-count3
+                            #if noStuckRBCs3 > 0:
+                                #print('Deal with stuck RBCs3')
+                                #print(noStuckRBCs3)
+                                #print(e3['sign'])
+                                #print(e3['rRBC'])
+                            #print(noStuckRBCs3)
+                            for i in range(noStuckRBCs3):
+                                index=-1*(i+1) if sign3 == 1.0 else i
+                                e3['rRBC'][index]=e3['length']-i*e3['minDist'] if sign3 == 1.0 else 0+i*e3['minDist']
+                            #print(e3['rRBC'])
+                            #Recheck if the distance between the newly introduces RBCs is still big enough 
+                            if len(e3['rRBC']) >1:
+                                moved = 0
+                                count = 0
+                                if sign3 == 1.0:
+                                    for i in range(-1,-1*(len(e3['rRBC'])),-1):
+                                        index=i-1
+                                        if e3['rRBC'][i] < e3['rRBC'][index] or abs(e3['rRBC'][i]-e3['rRBC'][index]) < e3['minDist']:
+                                            e3['rRBC'][index]=e3['rRBC'][i]-e3['minDist']
+                                            moved = 1
+                                        else:
+                                            moved = 0
+                                        count += 1
+                                        if count >= noStuckRBCs3 and moved == 0:
+                                            break
+                                else:
+                                    for i in range(len(e3['rRBC'])-1):
+                                        index=i+1
+                                        if e3['rRBC'][i] > e3['rRBC'][index] or abs(e3['rRBC'][i]-e3['rRBC'][index]) < e3['minDist']:
+                                            e3['rRBC'][index]=e3['rRBC'][i]+e3['minDist']
+                                            moved = 1
+                                        else:
+                                            moved = 0
+                                        count += 1
+                                        if count >= noStuckRBCs3+1 and moved == 0:
+                                            break
+                                #print(e3['rRBC'])
+     #-------------------------------------------------------------------------------------------
+                #if vertex is double connecting vertex
+                elif G.vs[vi]['vType'] == 6:
+                    #print('it is a double connecting Vertex')
+                    bifRBCsIndex1=bifRBCsIndex
+                    noBifEvents1=noBifEvents
+                    #print(noBifEvents1)
+                    outE=G.vs[vi]['outflowE'][0]
+                    inflowEdges=G.vs[vi]['inflowE']
+                    for i in inflowEdges:
+                        if i == e.index:
+                            inE1=e.index
+                        else:
+                            inE2=i
+                    convEdges2.append(inE2)
+                    e2=G.es[inE2]
+                    #Check if httBC exists
+                    if e2['httBC'] is not None:
+                        #print('Check adding RBCs')
+                        #print(e2.index)
+                        #print(e2['minDist'])
+                        rRBC = []
+                        lrbc = e2['minDist']
+                        htt = e2['httBC']
+                        length = e2['length']
+                        cum_length =  e2['v'] * dt
+                        if len(e2['rRBC']) > 0:
+                            distToFirst=e2['rRBC'][0] if e2['sign']==1.0 else e2['length']-e2['rRBC'][-1]
+                            if cum_length > distToFirst:
+                                cum_length = distToFirst
+                        if cum_length >= lrbc:
+                            nrbc_max = cum_length / lrbc
+                            #print(nrbc_max)
+                            nrbc_max_floor = np.floor(nrbc_max)
+                            #print(nrbc_max_floor)
+                            #nrbc = sum(np.random.rand(nrbc_max_floor)<htt)
+                            #number of RBCs randomly chosen to average htt
+                            nrbc = int(np.round((np.random.rand(1)[0]+0.5)*htt*nrbc_max_floor))
+                            lrbc_modulo = (nrbc_max - nrbc_max_floor) * lrbc
+                            start = 0-lrbc
+                            stop = cum_length
+                            rands=np.random.rand(nrbc)
+                            for i in range(nrbc):
+                                #pos = rands[i] * (stop - ((nrbc-i)*lrbc) - start) + start
+                                pos = start + lrbc +rands[i]*lrbc_modulo
+                                start = pos
+                                lrbc_modulo = lrbc_modulo - rands[i]*lrbc_modulo
+                                rRBC.append(pos)
+                            rRBC = np.array(rRBC)
+                            #print(nRBC)
+                            ##print(rRBC)
+                            if e2['sign'] == 1:
+                                #print('RBCs added at Input')
+                                ##print(e2['rRBC'])
+                                e2['rRBC'] = np.concatenate([rRBC, e2['rRBC']])
+                                ##print(e2['rRBC'])
+                                vertexUpdate.append(e2.target)
+                                vertexUpdate.append(e2.source)
+                                edgeUpdate.append(inE2)
+                            else:
+                                #print('RBCs added at Input')
+                                ##print(e2['rRBC'])
+                                e2['rRBC'] = np.concatenate([e2['rRBC'], length-rRBC[::-1]])
+                                ##print(e2['rRBC'])
+                                vertexUpdate.append(e2.target)
+                                vertexUpdate.append(e2.source)
+                                edgeUpdate.append(inE2)
+                    #If RBCs are present move all RBCs in inEdge2
+                    if len(e2['rRBC']) > 0:
+                        e2['rRBC'] = e2['rRBC'] + e2['v'] * dt * e2['sign']
+                        bifRBCsIndex2=[]
+                        nRBC2=len(e2['rRBC'])
+                        #print(e2['length'])
+                        if e2['sign'] == 1.0:
+                            if e2['rRBC'][-1] > e2['length']:
+                                for i,j in enumerate(e2['rRBC'][::-1]):
+                                    if j > e2['length']:
+                                        bifRBCsIndex2.append(nRBC2-1-i)
+                                    else:
+                                        break
+                                    #print('')
+                                    #print(j)
+                                    #print(i) 
+                            bifRBCsIndex2=bifRBCsIndex2[::-1]
+                            #bifRBCsIndex=[ i for (i,j) in enumerate(e['rRBC']) if j >= e['length'] ]
+                        else:
+                            if e2['rRBC'][0] < 0:
+                                for i,j in enumerate(e2['rRBC']):
+                                    if j < 0:
+                                        bifRBCsIndex2.append(i)
+                                    else:
+                                        break
+                        #if e2['sign'] == 1.0:
+                        #    bifRBCsIndex2=[ i for (i,j) in enumerate(e2['rRBC']) if j >= e2['length'] ]
+                        #else:
+                        #    bifRBCsIndex2=[ i for (i,j) in enumerate(e2['rRBC']) if j <= 0 ]
+                        noBifEvents2=len(bifRBCsIndex2)
+                    else:
+                        noBifEvents2=0
+                    sign2=e2['sign']
+                    #print('Second inedge')
+                    #print(e2['sign'])
+                    #print(noBifEvents2)
+                    #print(bifRBCsIndex2)
+                    ##print(e2['rRBC'])
+                    #print(len(e2['rRBC']))
+                    #print(e2['length'])
+                    #print('First inedge')
+                    #print(e['sign'])
+                    #print(noBifEvents1)
+                    #print(bifRBCsIndex1)
+                    ##print(e['rRBC'])
+                    #print(len(e['rRBC']))
+                    #print(e['length'])
+                    #Define outEdges
+                    outEdges=G.vs[vi]['outflowE']
+                    outE=outEdges[0]
+                    outE2=outEdges[1]
+        		    #Differ between capillaries and non-capillaries
+                    if G.vs[vi]['isCap']:
+                        preferenceList = [x[1] for x in sorted(zip(np.array(G.es[outEdges]['flow'])/np.array(G.es[outEdges]['crosssection']), outEdges), reverse=True)]
+                    else:
+                        preferenceList = [x[1] for x in sorted(zip(G.es[outEdges]['flow'], outEdges), reverse=True)]
+        	            #Define prefered OutEdges
+                    outEPref=preferenceList[0]
+                    outEPref2=preferenceList[1]
+                    oe=G.es[outEPref]
+                    oe2=G.es[outEPref2]
+                    #print('Check outEdges')
+                    ##print(oe['rRBC'])
+                    #print(oe['sign'])
+                    ##print(oe2['rRBC'])
+                    #print(oe2['sign'])
+                    #Calculate distance to first RBC
+                    if len(oe['rRBC']) > 0:
+                        distToFirst=oe['rRBC'][0] if oe['sign'] == 1.0 else oe['length']-oe['rRBC'][-1]
+                    else:
+                        distToFirst=oe['length']
+                    if len(oe2['rRBC']) > 0:
+                        distToFirst2=oe2['rRBC'][0] if oe2['sign'] == 1.0 else oe2['length']-oe2['rRBC'][-1]
+                    else:
+                        distToFirst2=oe2['length']
+                    #print(distToFirst)
+                    #print(oe['minDist'])
+                    #print(distToFirst2)
+                    #print(oe2['minDist'])
+                    #Check how many RBCs are allowed by nMax
+                    #print('posNoBifEvents') 
+                    posNoBifEventsPref=np.floor(distToFirst/oe['minDist'])
+                    #print(posNoBifEventsPref) 
+                    if posNoBifEventsPref + len(oe['rRBC']) > oe['nMax']:
+                        posNoBifEventsPref = oe['nMax'] - len(oe['rRBC'])
+                    #print(posNoBifEventsPref) 
+                    posNoBifEventsPref2=np.floor(distToFirst2/oe2['minDist'])
+                    #print(posNoBifEventsPref2) 
+                    if posNoBifEventsPref2 + len(oe2['rRBC']) > oe2['nMax']:
+                        posNoBifEventsPref2 = oe2['nMax'] - len(oe2['rRBC'])
+                    #print(posNoBifEventsPref2) 
+                    #Check how many RBCs fit into the new Vessel
+                    posNoBifEvents=int(posNoBifEventsPref+posNoBifEventsPref2)
+                    #Calculate number of bifEvents
+                    #If bifurcations are possible check how many overshoots there are at the inEdges
+                    ##print(e['rRBC'])
+                    #print(len(e['rRBC']))
+                    if posNoBifEvents > 0:
+                        overshootDist1=[e['rRBC'][bifRBCsIndex1]-[e['length']]*noBifEvents1 if sign == 1.0     
+                            else [0]*noBifEvents1-e['rRBC'][bifRBCsIndex1]][0]
+                        #print('OvershootDists')
+                        if sign != 1.0:
+                            overshootDist1 = overshootDist1[::-1]
+                        #print(overshootDist1)
+                        overshootTime1=np.array(overshootDist1 / ([e['v']]*noBifEvents1))
+                        #print(overshootTime1)
+                        dummy1=np.array([1]*len(overshootTime1))
+                        if noBifEvents2 > 0:
+                            #print(e2['rRBC'])
+                            #print(len(e2['rRBC']))
+                            overshootDist2=[e2['rRBC'][bifRBCsIndex2]-[e2['length']]*noBifEvents2 if sign2 == 1.0
+                                else [0]*noBifEvents2-e2['rRBC'][bifRBCsIndex2]][0]
+                            if sign2 != 1.0:
+                                overshootDist2 = overshootDist2[::-1]
+                            #print(overshootDist2)
+                            overshootTime2=np.array(overshootDist2)/ np.array([e2['v']]*noBifEvents2)
+                            #print(overshootTime2)
+                            dummy2=np.array([2]*len(overshootTime2))
+                        else:
+                            overshootDist2=[]
+                            overshootTime2=[]
+                            dummy2=[]
+                        overshootTimes=zip(np.concatenate([overshootTime1,overshootTime2]),np.concatenate([dummy1,dummy2]))
+                        #print(overshootTimes)
+                        overshootTimes.sort()
+                        #print(overshootTimes)
+                        overshootTime=[]
+                        inEdge=[]
+                        count1=0
+                        count2=0
+                        if posNoBifEvents > len(overshootTimes):
+                            overshootsNo=int(len(overshootTimes))
+                        else:
+                            overshootsNo=int(posNoBifEvents)
+                        for i in range(-1*overshootsNo,0):
+                            overshootTime.append(overshootTimes[i][0])
+                            inEdge.append(overshootTimes[i][1])
+                        #    if overshootTimes[i][1] == 1:
+                        #        count1 += 1
+                        #    elif overshootTimes[i][1] == 2:
+                        #        count2 += 1
+                        count1=inEdge.count(1)
+                        count2=inEdge.count(2)
+                        #print(overshootTime)
+                        #print('overshootsNo')
+                        #print(overshootsNo)
+                        if oe['sign'] == 1.0:
+                            position1=np.array(overshootTime)*np.array([oe['v']]*overshootsNo)
+                        else:
+                            position1=np.array([oe['length']]*overshootsNo)-np.array(overshootTime[::-1])* \
+                                np.array([oe['v']]*overshootsNo)
+                        if oe2['sign'] == 1.0:
+                            position2=np.array(overshootTime)*np.array([oe2['v']]*overshootsNo)
+                        else:
+                            position2=np.array([oe2['length']]*overshootsNo)-np.array(overshootTime[::-1])* \
+                                np.array([oe2['v']]*overshootsNo)
+                        #print(position1)
+                        #print(position2)
+                        #print(inEdge)
+        		        #To begin with it is tried if all RBCs fit into the prefered outEdge. The time of arrival at the RBCs is take into account
+                        #RBCs which would be too close together are put into the other edge
+                        #postion2/position3 is used if there is not enough space in the prefered outEdge and hence the RBC is moved to the other outEdge
+        			#actual position of RBCs in the edges
+                        positionPref2=[]
+                        positionPref1=[]
+                        #number of RBCs in the Edges
+                        countPref1=0
+                        countPref2=0
+                        #print(oe['minDist'])
+                        #print(oe2['minDist'])
+                        #print(oe['length'])
+                        #print(oe2['length'])
+        		        #Loop over all movable RBCs
+        		        #Loop over all movable RBCs
+                        for i in range(overshootsNo):
+                            #TODO check index again
+                            index=-1*(i+1) if sign == 1.0 else i
+                            index1=-1*(i+1) if oe['sign'] == 1.0 else i
+                            index2=-1*(i+1) if oe2['sign'] == 1.0 else i
+                            posRBC1=position1[index1] if oe['sign'] == 1 else oe['length']-position1[index1]
+                            posRBC2=position2[index2] if oe2['sign'] == 1 else oe2['length']-position2[index2]
+                            #print(positionPref1)
+                            #print(countPref1)
+                            #print(positionPref2)
+                            #print(countPref2)
+                            #check if RBC still fits into Prefered OutE
+                            if posNoBifEventsPref > countPref1 and posRBC1 > 0:
+                                #Check if there are RBCs present in outEPref
+                                if positionPref1 != []:
+                                    #Check if distance to preceding RBC is big enough
+                                    dist1=positionPref1[-1]-position1[index1] if oe['sign'] == 1.0 \
+                                        else position1[index1]-positionPref1[-1]
+                                    #print('Check distance')
+                                    #print(dist1)
+                                    #The distance is not big enough check if RBC fits into outEPref2
+                                    if dist1 < oe['minDist']:
+                                        #if RBCs are present in the outEdgePref2
+                                        if posNoBifEventsPref2 > countPref2 and posRBC2 > 0:
+                                            if positionPref2 != []:
+                                                dist2=positionPref2[-1]-position2[index2] if oe2['sign'] == 1.0 \
+                                                    else position2[index2]-positionPref2[-1]
+                                                #Check if there is enough space in 2nd outEdge
+        						#in case there is not enough space:
+                                                #print(dist2)
+                                                if dist2 < oe2['minDist']:
+                                                        timeBlocked1=(oe['minDist']-dist1)/oe['v']
+                                                        timeBlocked2=(oe2['minDist']-dist2)/oe2['v']
+                                                        if timeBlocked1 < timeBlocked2:
+                                                            if oe['sign'] == 1.0:
+                                                                position1[index1]=positionPref1[-1]-oe['minDist']
+                                                                if position1[index1] > 0:
+                                                                    positionPref1.append(position1[index1])
+                                                                    countPref1 += 1
+                                                            else:
+                                                                position1[index1]=positionPref1[-1]+oe['minDist']
+                                                                if position1[index1] < oe['minDist']:
+                                                                    positionPref1.append(position1[index1])
+                                                                    countPref1 += 1
+                                                        else:
+                                                            if oe2['sign'] == 1.0:
+                                                                position2[index2]=positionPref2[-1]-oe2['minDist']
+                                                                if position2[index2] > 0:
+                                                                    positionPref2.append(position2[index2])
+                                                                    countPref2 += 1
+                                                            else:
+                                                                position2[index2]=positionPref2[-1]+oe2['minDist']
+                                                                if position2[index2] < oe2['minDist']:
+                                                                    positionPref2.append(position2[index2])
+                                                                    countPref2 += 1
+                                                #there is enough space for the RBC in outEPref2
+                                                else:
+                                                    positionPref2.append(position2[index2])
+                                                    countPref2 += 1
+                                            #there are no RBCs in outEdge2
+                                            else:
+                                                if oe2['sign'] == 1.0:
+                                                    if position2[index2] > oe2['length']:
+                                                        position2[index2]=oe2['length']
+                                                    if len(oe2['rRBC'])>0:
+                                                        if oe2['rRBC'][0]-position2[index2] < oe2['minDist']:
+                                                            position2[index2]=oe2['rRBC'][0]-oe2['minDist']
+                                                else:
+                                                    if position2[index2] < 0:
+                                                        position2[index2]=0
+                                                    if len(oe2['rRBC'])>0:
+                                                        if position2[index2]-oe2['rRBC'][-1] < oe2['minDist']:
+                                                            position2[index2]=oe2['rRBC'][-1]+oe2['minDist']
+                                                positionPref2.append(position2[index2])
+                                                countPref2 += 1
+                                        else:
+                                            if inEdge[-1*(i+1)] == 1:
+                                                count1 += -1
+                                            elif inEdge[-1*(i+1)] == 2:
+                                                count2 += -1
+                                    #If the RBC fits into outEPref1
+                                    else:
+                                       positionPref1.append(position1[index1])
+                                       countPref1 += 1
+                                #There are not yet any new RBCs in outEdgePref
+                                else:
+                                    if oe['sign'] == 1.0:
+                                        if position1[index1] > oe['length']:
+                                            position1[index1]=oe['length']
+                                        if len(oe['rRBC'])>0:
+                                            if oe['rRBC'][0]-position1[index1] < oe['minDist']:
+                                                position1[index1]=oe['rRBC'][0]-oe['minDist']
+                                    else:
+                                        if position1[index1] < 0:
+                                            position1[index1]=0
+                                        if len(oe['rRBC'])>0:
+                                            if position1[index1]-oe['rRBC'][-1] < oe['minDist']:
+                                                position1[index1]=oe['rRBC'][-1]+oe['minDist']
+                                    positionPref1.append(position1[index1])
+                                    countPref1 += 1
+                            #The RBCs do not fit into the prefered outEdge anymore
+                            #Therefore they are either put in outEdge2 or outEdge3
+                            elif posNoBifEventsPref2 > countPref2 and posRBC2 > 0:
+                                #Check if there are already new RBCs in outEPref2
+                                if positionPref2 != []:
+                                    dist2=positionPref2[-1]-position2[index2] if oe2['sign'] == 1.0 \
+                                        else position2[index2]-positionPref2[-1]
+                                    if dist2 < oe2['minDist']:
+                                        if oe2['sign'] == 1.0:
+                                            position2[index2]=positionPref2[-1]-oe2['minDist']
+                                            if position2[index2] > 0:
+                                                positionPref2.append(position2[index2])
+                                                countPref2 += 1
+                                        else:
+                                            position2[index2]=positionPref2[-1]+oe2['minDist']
+                                            if position2[index2] < oe2['minDist']:
+                                                positionPref2.append(position2[index2])
+                                                countPref2 += 1
+                                    #There is enough space for the RBCs in the outEdge 2
+                                    else:
+                                        positionPref2.append(position2[index2])
+                                        countPref2 += 1
+                                #There are not yet any RBCs in outEdge 2
+                                else:
+                                    if oe2['sign'] == 1.0:
+                                        if position2[index2] > oe2['length']:
+                                            position2[index2]=oe2['length']
+                                        if len(oe2['rRBC']) > 0:
+                                            if oe2['rRBC'][0]-position2[index2] < oe2['minDist']:
+                                                position2[index2]=oe2['rRBC'][0]-oe2['minDist']
+                                    else:
+                                        if position2[index2] < 0:
+                                            position2[index2]=0
+                                        if len(oe2['rRBC']) > 0:
+                                            if position2[index2]-oe2['rRBC'][-1] < oe2['minDist']:
+                                                position2[index2]=oe2['rRBC'][-1]+oe2['minDist']
+                                    positionPref2.append(position2[index2])
+                                    countPref2 += 1
+                            else:
+                                if inEdge[-1*(i+1)] == 1:
+                                    count1 += -1
+                                elif inEdge[-1*(i+1)] == 2:
+                                    count2 += -1
+                        #print('positionPref')
+                        #print(positionPref1)
+                        #print(positionPref2)
+                        #Add rbcs to outEPref
+                        if countPref2+countPref1 != overshootsNo:
+                            #print('NOT ALL RBC COULD HAVE BEEN DISTRIBUTED OVERSHOOTSNO ADJUSTED')
+                            #print(overshootsNo)
+                            overshootsNo = countPref2+countPref1
+                            #print(overshootsNo)
+                        if oe['sign'] == 1.0:
+                            #print('CHECK CONCATENATE dconnectV')
+                            #print(positionPref1)
+                            ##print(oe['rRBC'])
+                            oe['rRBC']=np.concatenate([positionPref1[::-1], oe['rRBC']])
+                            ##print(oe['rRBC'])
+                            #print(outEPref)
+                        else:
+                            #print('CHECK CONCATENATE dConnectV')
+                            #print(positionPref1)
+                            ##print(oe['rRBC'])
+                            oe['rRBC']=np.concatenate([oe['rRBC'],positionPref1])
+                            ##print(oe['rRBC'])
+                            #print(outEPref)
+                        if len(oe['rRBC']) > oe['nMax']:
+                            print('ERROR NEW 2')
+                            print(len(oe['rRBC']))
+                            print(oe['nMax'])
+                            print(outEPref)
+                        #Add rbcs to outEPref2       
+                        if oe2['sign'] == 1.0:
+                            #print('CHECK CONCATENATE dConnectV')
+                            #print(positionPref2)
+                            ##print(oe2['rRBC'])
+                            #print(outEPref2)
+                            oe2['rRBC']=np.concatenate([positionPref2[::-1], oe2['rRBC']])
+                            ##print(oe2['rRBC'])
+                            #print(outEPref2)
+                        else:
+                            #print('CHECK CONCATENATE dConnectV')
+                            #print(positionPref2)
+                            ##print(oe2['rRBC'])
+                            oe2['rRBC']=np.concatenate([oe2['rRBC'],positionPref2])
+                            ##print(oe2['rRBC'])
+                            #print(outEPref2)
+                        if len(oe2['rRBC']) > oe2['nMax']:
+                            print('ERROR NEW 3')
+                            print(len(oe2['rRBC']))
+                            print(oe2['nMax'])
+                            print(outEPref2)
+                        #rbcMoved calculates number of RBCs moved per timestep
+                        rbcMoved += count1 + count2
+                        rbcsMovedPerEdge.append(count1+count2)
+                        #Remove RBCs from old Edge 1
+                        if count1 > 0:
+                            if sign == 1.0:
+                                e['rRBC']=e['rRBC'][:-count1]
+                            else:
+                                e['rRBC']=e['rRBC'][count1::]
+        
+                        if noBifEvents2 > 0 and count2 > 0:
+                            #Remove RBCs from old Edge 2
+                            if sign2 == 1.0:
+                                e2['rRBC']=e2['rRBC'][:-count2]
+                            else:
+                                e2['rRBC']=e2['rRBC'][count2::]
+                        #Recheck if the distance between the newly introduces RBCs is still big enough
+                        #TODO:  not really needed needed
+                        #TODO: here it is check if one RBC overshoots a whole vessel in one timestep
+                        #outEPref
+                        #print('Recheck RBC position')
+                        ##print(oe['rRBC'])
+                        if len(oe['rRBC']) > 0:
+                            if len(positionPref1) == len(oe['rRBC']):
+                                if oe['sign'] == 1.0:
+                                    iter=len(positionPref1)-2
+                                    if oe['rRBC'][-1] > oe['length']:
+                                        oe['rRBC'][-1]=oe['length']
+                                else:               
+                                    iter=len(positionPref1)-1                
+                                    if oe['rRBC'][0] < 0:
+                                        oe['rRBC'][0]=0
+                                ##print(oe['rRBC'])
+                            else:
+                                if oe['sign']==1.0:
+                                    iter=len(positionPref1)-1
+                                else:
+                                    iter=len(positionPref1)
+                            #print(iter)
+                            if oe['sign']==1.0:
+                                for i in range(iter,-1,-1):
+                                    if oe['rRBC'][i+1]-oe['rRBC'][i] < oe['minDist'] \
+                                        or oe['rRBC'][i+1]-oe['rRBC'][i] < 0:
+                                        oe['rRBC'][i]=oe['rRBC'][i+1]-oe['minDist']
+                            else:
+                                for i in range(-1*iter,0,1):
+                                    if oe['rRBC'][i]-oe['rRBC'][i-1] < oe['minDist'] \
+                                        or oe['rRBC'][i]-oe['rRBC'][i-1] < 0:          
+                                        oe['rRBC'][i]=oe['rRBC'][i-1]+oe['minDist']
+                        #print('Recheck RBC position 2')
+                        ##print(oe2['rRBC'])
+                        if len(oe2['rRBC']) > 0:
+                            if len(positionPref2) == len(oe2['rRBC']):
+                                if oe2['sign'] == 1.0:
+                                    iter=len(positionPref2)-2
+                                    if oe2['rRBC'][-1] > oe2['length']:
+                                        oe2['rRBC'][-1]=oe2['length']
+                                else:               
+                                    iter=len(positionPref2)-1                
+                                    if oe2['rRBC'][0] < 0:
+                                        oe2['rRBC'][0]=0
+                                #print(oe2['rRBC'])
+                            else:
+                                if oe2['sign']==1.0:
+                                    iter=len(positionPref2)-1
+                                else:
+                                    iter=len(positionPref2)
+                            #print(iter)
+                            if oe2['sign']==1.0:
+                                for i in range(iter,-1,-1):
+                                    if oe2['rRBC'][i+1]-oe2['rRBC'][i] < oe2['minDist'] \
+                                        or oe2['rRBC'][i+1]-oe2['rRBC'][i] < 0:
+                                        oe2['rRBC'][i]=oe2['rRBC'][i+1]-oe2['minDist']
+                            else:
+                                for i in range(-1*iter,0,1):
+                                    if oe2['rRBC'][i]-oe2['rRBC'][i-1] < oe2['minDist'] \
+                                        or oe2['rRBC'][i]-oe2['rRBC'][i-1] < 0:          
+                                        oe2['rRBC'][i]=oe2['rRBC'][i-1]+oe2['minDist']
+                        ##print(oe2['rRBC'])
+                    else:
+                        countPref1=0
+                        countPref2=0
+                        count1=0
+                        count2=0
+                    #Deal with RBCs which could not be reassigned to the new edge because of a traffic jam
+                    #InEdge 1
+                    #print('Deal with stuck RBCs')
+                    #print(e.index)
+                    #print(len(bifRBCsIndex1))
+                    #print(count1)
+                    noStuckRBCs1=len(bifRBCsIndex1)-count1 
+                    #print(noStuckRBCs1)
+                    ##print(e['rRBC'])
+                    for i in range(noStuckRBCs1):
+                        index=-1*(i+1) if sign == 1.0 else i
+                        e['rRBC'][index]=e['length']-i*e['minDist'] if sign == 1.0 else 0+i*e['minDist']
+                    ##print(e['rRBC'])
+                    #Recheck if the distance between the newly introduces RBCs is still big enough 
+                    if len(e['rRBC']) >1.0:
+                        moved = 0
+                        if sign == 1.0:
+                            count = 0
+                            for i in range(-1,-1*(len(e['rRBC'])),-1):
+                                index=i-1
+                                if e['rRBC'][i] < e['rRBC'][index] or abs(e['rRBC'][i]-e['rRBC'][index]) < e['minDist']:
+                                    e['rRBC'][index]=e['rRBC'][i]-e['minDist']
+                                    moved = 1
+                                else:
+                                    moved = 0
+                                count += 1
+                                if count >= noStuckRBCs1 and moved == 0:
+                                    break
+                        else:
+                            count = 0
+                            for i in range(len(e['rRBC'])-1):
+                                index=i+1
+                                if e['rRBC'][i] > e['rRBC'][index] or abs(e['rRBC'][i]-e['rRBC'][index]) < e['minDist']:
+                                    e['rRBC'][index]=e['rRBC'][i]+e['minDist']
+                                    moved = 1
+                                else:
+                                    moved = 0
+                                count += 1
+                                if count >= noStuckRBCs1+1 and moved == 0:
+                                    break
+                    ##print(e['rRBC'])
+                    #Deal with RBCs which could not be reassigned to the new edge because of a traffic jam
+                    #InEdge 2
+                    if noBifEvents2 > 0:
+                        #print('Deal with stuck RBCs 2')
+                        #print(e2.index)
+                        #print(len(bifRBCsIndex2))
+                        #print(count2)
+                        noStuckRBCs2=len(bifRBCsIndex2)-count2
+                        #print(noStuckRBCs2)
+                        ##print(e2['rRBC'])
+                        for i in range(noStuckRBCs2):
+                            index=[-1*(i+1) if sign2 == 1.0 else i]
+                            e2['rRBC'][index]=[e2['length']-i*e2['minDist'] if sign2 == 1.0 else 0+i*e2['minDist']]
+                        ##print(e2['rRBC'])
+                        #Recheck if the distance between the newly introduces RBCs is still big enough 
+                        if len(e2['rRBC']) >1:
+                            moved = 0
+                            if sign2 == 1.0:
+                                count = 0
+                                for i in range(-1,-1*(len(e2['rRBC'])),-1):
+                                    index=i-1
+                                    if e2['rRBC'][i] < e2['rRBC'][index] or abs(e2['rRBC'][i]-e2['rRBC'][index]) < e2['minDist']:
+                                        e2['rRBC'][index]=e2['rRBC'][i]-e2['minDist']
+                                        moved = 1
+                                    else:
+                                        moved = 0
+                                    count += 1
+                                    if count >= noStuckRBCs2 and moved == 0:
+                                        break
+                            else:
+                                count = 0
+                                for i in range(len(e2['rRBC'])-1):
+                                    index=i+1
+                                    if e2['rRBC'][i] > e2['rRBC'][index] or abs(e2['rRBC'][i]-e2['rRBC'][index]) < e2['minDist']:
+                                        e2['rRBC'][index]=e2['rRBC'][i]+e2['minDist']
+                                        moved = 1
+                                    else:
+                                        moved = 0
+                                    count += 1
+                                    if count >= noStuckRBCs2+1 and moved == 0:
+                                        break
+                        ##print(e2['rRBC'])
+        #-------------------------------------------------------------------------------------------
+                if overshootsNo != 0:
+                    vertexUpdate.append(e.target)
+                    vertexUpdate.append(e.source)
+                    for i in edgesInvolved:
+                        edgeUpdate.append(i)
+        #    else:
+        #        print('No bifurcation Event takes place')
+        #else:
+        #    print('RBC in conv edges')
+        for EInv in edgesInvolved:
+            eInv=G.es(EInv)
+            if len(eInv['rRBC'][0]) > 0:
+                for i in eInv['rRBC'][0]:
+                    if i < 0 or i > eInv['length']:
+                        print('BIGERROR END')
+                        print(eInv['rRBC'])
+                        print('edgesInvolved '+str(EInv))
+                        print(i)
+                        print(EInv)
+                        print(eInv['sign'])
+                        print(eInv['length'])
+                        print(eInv['minDist'])
+                        print(G.vs[vi]['inflowE'])
+                        print(G.vs[vi]['outflowE'])
+                        print(vi)
+                for i in eInv['rRBC'][-1]:
+                    if i < 0 or i > eInv['length']:
+                        print('BIGERROR END_')
+                        print(eInv['rRBC'])
+                        print('edgesInvolved '+str(EInv))
+                        print(i)
+                        print(EInv)
+                        print(eInv['sign'])
+                        print(eInv['length'])
+                        print(eInv['minDist'])
+                        print(G.vs[vi]['inflowE'])
+                        print(G.vs[vi]['outflowE'])
+                        print(vi)
+                for i in range(len(eInv['rRBC'][0])-1):
+                    if eInv['rRBC'][0][i] > eInv['rRBC'][0][i+1]:
+                        print('BIGERROR END2')
+                        print('edgesInvolved '+str(EInv))
+                        print(eInv['rRBC'])
+                        print(len(eInv['rRBC']))
+                        print(EInv)
+                        print(i)
+                        print(G.vs[vi]['inflowE'])
+                        print(G.vs[vi]['outflowE'])
+                        print(eInv['sign'])
+                        print(eInv['length'])
+                for i in range(len(eInv['rRBC'][0])-1):
+                    if eInv['rRBC'][0][i+1]- eInv['rRBC'][0][i] < eInv['minDist']-10*eps:
+                        print('BIGERROR END3')
+                        print(eInv['rRBC'])
+                        print(len(eInv['rRBC']))
+                        print(EInv)
+                        print(eInv['sign'])
+                        print(eInv['length'])
+                        print(eInv['minDist'])
+                        print(eInv['rRBC'][0][i+1]- eInv['rRBC'][0][i])
+                        print(i)
+                        print(vi)
+                        print(G.vs[vi]['inflowE'])
+                        print(G.vs[vi]['outflowE'])
+    return G, vertexUpdate, edgeUpdate, rbcMoved, rbcsMovedPerEdge, edgesInvolved
