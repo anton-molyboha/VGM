@@ -1048,7 +1048,7 @@ class LinearSystemHtd(object):
                             G['BackUpCounter']=BackUpCounter
                             filename1='sampledict_BackUp_'+str(BackUpCounter)+'.pkl'
                             filename2='G_BackUp'+str(BackUpCounter)+'.pkl'
-                            #self._plot_sample_average()
+                            self._plot_sample_average()
                             #Convert deaultUnits to 'pBC' ['mmHG']
                             for v in G.vs:
                                 if v['pBC'] != None:
@@ -1090,7 +1090,7 @@ class LinearSystemHtd(object):
         G['iterFinalSample']=tSample
         if doSampling:
             self._sample()
-            #self._plot_sample_average('sample_avg_final.vtp')
+            self._plot_sample_average('sample_avg_final.vtp')
             g_output.write_pkl(self._sampledict, 'sampledict.pkl')
             if BackUp:
                filename1='sampledict_BackUp_'+str(BackUpCounter)+'.pkl'
