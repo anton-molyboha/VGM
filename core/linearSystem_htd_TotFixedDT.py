@@ -278,7 +278,7 @@ class LinearSystemHtdTotFixedDT(object):
         # Compute the current tube hematocrit from the RBC positions:
         for e in G.es:
             e['htt']=min(len(e['rRBC'])*vrbc/e['volume'],1)
-            e['htd']=min(htt2htd(e['htt'], e['diameter'], invivo), 0.95)
+            e['htd']=min(htt2htd(e['htt'], e['diameter'], invivo), 1.0)
         print('Initial htt and htd computed')        
 
         # This initializes the full LS. Later, only relevant parts of
@@ -510,7 +510,7 @@ class LinearSystemHtdTotFixedDT(object):
             es = G.es(esequence)
 
         es['htt'] = [min(e['nRBC'] * vrbc / e['volume'],1) for e in es]
-        es['htd']= [min(htt2htd(e['htt'], e['diameter'], invivo), 0.95) for e in es]
+        es['htd']= [min(htt2htd(e['htt'], e['diameter'], invivo), 1.0) for e in es]
 
 	self._G=G
 
@@ -559,7 +559,7 @@ class LinearSystemHtdTotFixedDT(object):
                 one of [-1, 0, 1])
         """
         G = self._G
-        if 'sign' in G.es.attributes():
+        if 'sign' in G.es.attributes() and None not in G.es['sign']:
             G.es['signOld']=G.es['sign']
         G.es['sign'] = [np.sign(G.vs[source]['pressure'] -
                                 G.vs[target]['pressure']) for source,target in zip(G.es['source'],G.es['target'])]
@@ -1015,8 +1015,8 @@ class LinearSystemHtdTotFixedDT(object):
             edgeList=np.unique(edgeList).tolist()
             edgeList=[int(i) for i in edgeList]
             vertexList=[int(i) for i in vertexList]
-        dischargeHt = [min(htt2htd(e, d, invivo), 0.95) for e,d in zip(G.es[edgeList]['htt'],G.es[edgeList]['diameter'])]
-        G.es[edgeList]['effResistance'] =[ res * nurel(d, dHt,invivo) for res,dHt,d in zip(G.es[edgeList]['resistance'], \
+        dischargeHt = [min(htt2htd(e, d, invivo), 1.0) for e,d in zip(G.es[edgeList]['htt'],G.es[edgeList]['diameter'])]
+        G.es[edgeList]['effResistance'] =[ res * nurel(max(d,4.0), min(dHt,0.6),invivo) for res,dHt,d in zip(G.es[edgeList]['resistance'], \
             dischargeHt,G.es[edgeList]['diamCalcEff'])]
 
         edgeList = G.es(edgeList)

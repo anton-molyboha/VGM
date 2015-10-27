@@ -15,11 +15,7 @@ from units import *
 from vascularGraph import *
 from linearSystem_htd_TotFixedDT_NEW import *
 from linearSystem_htd_TotFixedDT_StempRBCs import *
-from linearSystem_htd_TotFixedDT_reducedMinDist import *
 from linearSystem_htd_TotFixedDT_StempRBCs_AvgBox import *
-from linearSystem_htd_TotFixedDT_maxViscosity import *
-from linearSystem_htd_TotFixedDT_scaled import *
-from linearSystem_htd_TotFixedDT_scaled_maxViscosity import *
 from linearSystem_htd_TotFixedDT_maxViscosityWithFlow import *
 
 import dilation_and_splits
@@ -39,9 +35,5 @@ import units
 import vascularGraph
 import linearSystem_htd_TotFixedDT_NEW
 import linearSystem_htd_TotFixedDT_StempRBCs
-import linearSystem_htd_TotFixedDT_reducedMinDist
 import linearSystem_htd_TotFixedDT_StempRBCs_AvgBox
-import linearSystem_htd_TotFixedDT_maxViscosity
-import linearSystem_htd_TotFixedDT_scaled
-import linearSystem_htd_TotFixedDT_scaled_maxViscosity
 import linearSystem_htd_TotFixedDT_maxViscosityWithFlow
