@@ -2075,13 +2075,14 @@ class VascularGraph(Graph):
                         G.vs[vI]['vType'] = 1
                         if 'httBC' in G.es.attribute_names():
                             G.es[edgeVI]['httBC']=G.es[edgeVI]['httBC_init']
-                            if len(G.es[edgeVI]['rRBC']) > 0:
-                                if G.es['sign'][edgeVI] == 1:
-                                    G.es[edgeVI]['posFirst_last']=G.es['rRBC'][edgeVI][0]
+                            if 'rRBC' in G.es.attribute_names():
+                                if len(G.es[edgeVI]['rRBC']) > 0:
+                                    if G.es['sign'][edgeVI] == 1:
+                                        G.es[edgeVI]['posFirst_last']=G.es['rRBC'][edgeVI][0]
+                                    else:
+                                        G.es[edgeVI]['posFirst_last']=G.es['length'][edgeVI]-G.es['rRBC'][edgeVI][-1]
                                 else:
-                                    G.es[edgeVI]['posFirst_last']=G.es['length'][edgeVI]-G.es['rRBC'][edgeVI][-1]
-                            else:
-                                G.es[edgeVI]['posFirst_last']=G.es['length'][edgeVI]
+                                    G.es[edgeVI]['posFirst_last']=G.es['length'][edgeVI]
                             G.es[edgeVI]['v_last']=0
                             print(G.es[edgeVI]['v_last'])
                     elif len(inE) == 0 and len(outE) == 0:

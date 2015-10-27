@@ -114,7 +114,8 @@ def path_between_a_and_v_for_vertexList(G,v,direction='out'):
     stopPaths2=1e6
     indexHalf=np.floor(len(v)/9.)
 
-    for j in range(9):    
+    #for j in range(9):    
+    for j in range(1):    
         pathDict={}
         print('ROUND')
         print(j)
@@ -127,7 +128,10 @@ def path_between_a_and_v_for_vertexList(G,v,direction='out'):
             indexEnd=indexHalf*(j+1)
         print(indexStart)
         print(indexEnd)
-        for i in v[int(indexStart):int(indexEnd)]:
+        #for i in v[int(indexStart):int(indexEnd)]:
+        for i in v:
+            print('')
+            print(i)
             paths=[[i]]
             pathsEdges=[[]]
             boolContinue = 1
@@ -136,6 +140,8 @@ def path_between_a_and_v_for_vertexList(G,v,direction='out'):
             countLoop=0
             stdout.flush()
             while boolContinue:
+                print(len(paths))
+                stdout.flush()
                 countDone=0
                 countLoop += 1
                 if countLoop > stopPaths:

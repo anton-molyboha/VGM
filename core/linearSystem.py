@@ -53,6 +53,14 @@ class LinearSystem(object):
         else:
             self._withRBC = 0
 
+        if kwargs.has_key('invivo'):
+            if kwargs['invivo']!=0:
+                self._invivo = kwargs['invivo']
+            else:
+                self._invivo = 0
+        else:
+            self._invivo = 0
+
         if kwargs.has_key('resistanceLength'):
             if kwargs['resistanceLength']==1:
                 self._resistanceLength = 1
@@ -65,7 +73,6 @@ class LinearSystem(object):
         if self._withRBC != 0:
             if 'htt' not in G.es.attribute_names():
                 G.es['htt']=[self._withRBC]*G.ecount()
-                self._invivo=1
                 self._withRBC = 1
 
         self.update(G)
@@ -118,11 +125,9 @@ class LinearSystem(object):
 
         #if with RBCs compute effective resistance
         if self._withRBC:
-            G.es['diamCalcEff']=[i if i >= 3. else 3.0 for i in G.es['diameter'] ]
-            self._invivo=1
-            dischargeHt = [min(htt2htd(e, d, self._invivo), 0.95) for e,d in zip(G.es['htt'],G.es['diameter'])]
-            G.es['effResistance'] =[ res * nurel(d, dHt,self._invivo) for res,dHt,d in zip(G.es['resistance'], \
-                dischargeHt,G.es['diamCalcEff'])]
+            dischargeHt = [min(htt2htd(e, d, self._invivo), 1.0) for e,d in zip(G.es['htt'],G.es['diameter'])]
+            G.es['effResistance'] =[ res * nurel(max(4.0,d),min(dHt,0.6),self._invivo) for res,dHt,d in zip(G.es['resistance'], \
+                dischargeHt,G.es['diameter'])]
             G.es['conductance']=1/np.array(G.es['effResistance'])
             print('Conductance')
             print(np.sum(G.es['conductance']))
@@ -193,6 +198,7 @@ class LinearSystem(object):
                 
         b = self._b
         G = self._G
+        htt2htd = self._P.tube_to_discharge_hematocrit
         
         A = self._A.tocsr()
         if method == 'direct':
@@ -227,8 +233,13 @@ class LinearSystem(object):
                         conductance[i] for i, edge in enumerate(G.es)]
         for v in G.vs:
             v['pressure']=v['pressure']/vgm.units.scaling_factor_du('mmHg',G['defaultUnits'])
-        for e in G.es:
-	    e['v']=e['flow']/(0.25*np.pi*e['diameter']**2)
+        if self._withRBC:
+            for e in G.es:
+                dischargeHt = min(htt2htd(e['htt'], e['diameter'], self._invivo), 1.0)
+	        e['v']=dischargeHt/e['htt']*e['flow']/(0.25*np.pi*e['diameter']**2)
+        else:
+            for e in G.es:
+	        e['v']=e['flow']/(0.25*np.pi*e['diameter']**2)
         
         #Convert 'pBC' from default Units to mmHg
         pBCneNone=G.vs(pBC_ne=None).indices

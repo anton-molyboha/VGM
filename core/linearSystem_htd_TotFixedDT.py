@@ -76,6 +76,7 @@ class LinearSystemHtdTotFixedDT(object):
                    (innerDiam = 1 --> inner diameter given) (Default = 0)
                analyzeCapDil: edge index of dilated capillary should be given. Upstream divergent bifurcations
                    will be analyzed
+               species: 'rat', 'mouse' or 'human', default is 'rat'
         OUTPUT: None, however the following items are created:
                 self.A: Matrix A of the linear system, holding the conductance
                         information.
@@ -119,6 +120,14 @@ class LinearSystemHtdTotFixedDT(object):
 
         htd2htt=self._P.discharge_to_tube_hematocrit
         htt2htd = self._P.tube_to_discharge_hematocrit
+
+        if kwargs.has_key('species'):
+            self._species = kwargs['species']
+        else:
+            self._species = 'rat'
+
+        print('Species')
+        print(self._species)
 
         if kwargs.has_key('analyzeBifEvents'):
             self._analyzeBifEvents = kwargs['analyzeBifEvents']
@@ -175,7 +184,7 @@ class LinearSystemHtdTotFixedDT(object):
         print('Total network volume calculated')
 
         # Compute the edge-specific minimal RBC distance:
-        vrbc = self._P.rbc_volume()
+        vrbc = self._P.rbc_volume(self._species)
         if self._innerDiam:
             G.es['minDist'] = [vrbc / (np.pi * e['diameter']**2 / 4) for e in G.es]
         else:
@@ -493,7 +502,7 @@ class LinearSystemHtdTotFixedDT(object):
         G = self._G
         htt2htd = self._P.tube_to_discharge_hematocrit
         invivo=self._invivo
-        vrbc = self._P.rbc_volume()
+        vrbc = self._P.rbc_volume(self._species)
 
         if esequence is None:
             es = G.es
@@ -935,7 +944,7 @@ class LinearSystemHtdTotFixedDT(object):
         G = self._G
         invivo=self._invivo
         vf = self._P.velocity_factor
-        vrbc = self._P.rbc_volume()
+        vrbc = self._P.rbc_volume(self._species)
         vfList=[1.0 if htt == 0.0 else max(1.0,vf(d, invivo, tube_ht=htt)) for d,htt in zip(G.es['diameter'],G.es['htt'])]
 
         self._G=run_faster.update_flow_and_v(self._G,self._invivo,vfList,vrbc)

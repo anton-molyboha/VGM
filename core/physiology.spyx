@@ -181,8 +181,8 @@ cdef class Physiology(object):
 
         # The fit function assumes diameters in [micron] and returns pressures 
         # in [mmHg]. Conversion to default units is performed as required.
-        d = d / self._sf['um -> du']
-        sf = self._sf['mmHg -> du']
+        #d = d / self._sf['um -> du']
+        #sf = self._sf['mmHg -> du']
         
         d = max(min(d, 60), 8)
         if kind[0] == 'a':  
@@ -191,7 +191,7 @@ cdef class Physiology(object):
         elif kind[0] == 'v':
             pressure = 4.351e-06 * d**4. - 0.0006778 * d**3. + \
                        0.04041 * d**2. - 1.286 * d + 41.9                       
-        return pressure * sf
+        return pressure 
 
         
     # -------------------------------------------------------------------------
@@ -225,6 +225,49 @@ cdef class Physiology(object):
         elif kind[0] == 'v':
             pressure = 4.351e-06 * d**4. - 0.0006778 * d**3. + \
                        0.04041 * d**2. - 1.286 * d + 41.9 - 16.7
+
+        return pressure
+
+        
+    # -------------------------------------------------------------------------
+    # -------------------------------------------------------------------------
+       
+    cpdef blood_pressure_pial_literature(self, double d, str kind):    
+        """Returns a blood pressure value, according to the given vessel 
+        specifications.
+        
+        Combination of Data from Shapiro 1971 and from Lipowsky 2005 (Microvascular Rheology and Hemodynamics).
+        INPUT: d: Diameter of the blood vessel (see pressureValuesPialShapiro.py).
+               kind: Type of blood vessel. This may be either 'a' or 'v' for 
+                     'artery' or 'vein' respectively.
+        OUTPUT: Blood pressure
+        WARNING: This function only produces reliable results for diameters
+                 12.5 - 191 mum (arteries) and 34.2 - 180 mum 
+        """
+
+        cdef double sf, pressure
+
+        # The fit function assumes diameters in [micron] and returns pressures 
+        # in [mmHg]. Conversion to default units is performed as required.
+        #d = d / self._sf['um -> du']
+        #sf = self._sf['mmHg -> du']
+        
+        za=[2.59476905e-05,-8.91218311e-03,1.06888397e+00,2.04594862e+01]
+        zv=[-1.46211218e-05,4.18982898e-03,-3.70140492e-01,2.41445015e+01]
+
+
+        if kind[0] == 'a':  
+            if d < 12.5:
+                d=12.5
+            elif d > 191.0:
+                d=191.0
+            pressure =  za[0] * d**3. + za[1] * d**2. + za[2] * d + za[3]
+        elif kind[0] == 'v':
+            if d < 34.2:
+                d=34.2
+            elif d > 180:
+                d=180.0
+            pressure =  zv[0] * d**3. + zv[1] * d**2. + zv[2] * d + zv[3]
 
         return pressure
 
@@ -283,9 +326,9 @@ cdef class Physiology(object):
         formula provided by Pries and Neuhaus 1992.
         The extension to in-vivo was presented in a 2005 paper 'Microvascular
         blood viscosity in vivo and the endothelial surface layer'.
-        Note that this is the 'rat blood' version of the formula. The
-        diameter dependent exponents have been scaled with the cube
-        root of the mean red blood cell volume (rat 55fl, human 92fl).
+        Note that this is the 'rat blood' version of the formula. 
+        #If other species are considered the diameter dependent exponents have be
+        scaled with the cube root of the mean red blood cell volume (rat 55fl, human 92fl). ?
         INPUT: discharge_ht: Discharge Ht expressed as a fraction [0,1]
                d: Diameter of the vessel.
                invivo: Boolean, whether or not to consider ESL influence.
@@ -972,7 +1015,7 @@ cdef class Physiology(object):
     # -------------------------------------------------------------------------
     # -------------------------------------------------------------------------
         
-        
+       
     cpdef apparent_intrinsic_viscosity(self, double diameter=-1.0):
         """Returns the apparent intrinsic viscosity.
         This quantity actually depends on the vessel diameter, as well as on
