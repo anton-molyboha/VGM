@@ -2073,7 +2073,7 @@ class VascularGraph(Graph):
                         G.vs[vI]['av'] = 1
                         G.vs[vI]['vv'] = 0
                         G.vs[vI]['vType'] = 1
-                        if 'httBC' in G.es.attribute_names():
+                        if 'httBC' in G.es.attribute_names() and 'httBC_init' in G.es.attribute_names():
                             G.es[edgeVI]['httBC']=G.es[edgeVI]['httBC_init']
                             if 'rRBC' in G.es.attribute_names():
                                 if len(G.es[edgeVI]['rRBC']) > 0:
@@ -2312,4 +2312,196 @@ class VascularGraph(Graph):
             G['av']=G.vs(av_eq=1).indices
             G['vv']=G.vs(vv_eq=1).indices
  
+
+    #--------------------------------------------------------------------------                                                   
+
+    def strahler(self, nKind,startNKind,dir):
+        """Computes the basic strahler order
+        INPUT: nKind: the nkind of vertices which is to be investigated
+               startNKind: the nkind of the neighboring starting points, to define order = 0
+               dir: direction of strahler order analysis ('in' or 'out'). 'in' is used if upstream
+               bifurcations have higher orders (usually used for arteriole trees)
+        OUTPUT: edgeAttribute 'orderBasic'
+        """
+
+        Gdir=deepcopy(self)
+        
+        if 'orderBasic' not in self.es.attribute_names():
+            self.es['orderBasic'] = [-1 for e in self.es]
+        if 'orderBasic' not in self.vs.attribute_names():
+            self.vs['orderBasic'] = [-1 for e in self.es]
+        
+        if dir == 'in':
+            dir2='out'
+        else:
+            dir2='in'
+
+        if nKind == 2:
+            nKind2 = 0
+        elif nKind == 3:
+            nKind2 = 1
+        
+        capStarts=[]
+        for i in self.vs(nkind_eq=nKind).indices + self.vs(nkind_eq=nKind2).indices:
+            for j,k in zip(self.adjacent(i),self.neighbors(i)):
+                if self.vs[k]['nkind'] == startNKind:
+                    capStarts.append(i)
+
+        capStarts=np.unique(capStarts)
+        capStartsNew=[]
+        for i in capStarts:
+            for j,k in zip(self.adjacent(i),self.neighbors(i)):
+                if self.vs[k]['nkind'] == nKind or self.vs[k]['nkind'] == nKind2: 
+                    self.es[j]['orderBasic'] = 0
+                    self.vs[int(i)]['orderBasic'] = 0
+                    capStartsNew.append(k)
+        
+        Gdir.to_directed_flow_based()
+        for n in range(1000):
+            changedOrder=[0,0]
+            #boolInEdgesPresent=0
+            boolInEdgesPresent=1
+            while len(changedOrder) != 0:
+                changedOrder=[]
+                verts=self.vs(orderBasic_eq=n,nkind_eq=nKind).indices+self.vs(orderBasic_eq=n,nkind_eq=nKind2).indices
+                verts2=[]
+                for i in verts:
+                    for k in Gdir.neighbors(i,dir):
+                        if self.vs[k]['nkind'] == nKind or self.vs[k]['nkind'] == nKind2:
+                            verts2.append(k)
+                verts2=np.unique(verts2) 
+                for i in verts2:
+                    i=int(i)
+                    orderBasics=[]
+                    for j in Gdir.adjacent(i,dir2):
+                        orderBasics.append(self.es[j]['orderBasic'])
+                    #for j,k in zip(Gdir.adjacent(i,dir),Gdir.neighbors(i,dir)):
+                    #    if self.vs[k]['nkind'] == nKind or self.vs[k]['nkind'] == nKind2:
+                    #        boolInEdgesPresent=1
+                    if orderBasics.count(n) >= 2:
+                        if len(Gdir.neighbors(i,dir)) != 0:
+                            for j,k in zip(Gdir.adjacent(i,dir),Gdir.neighbors(i,dir)):
+                                if self.vs[k]['nkind'] == nKind or self.vs[k]['nkind'] == nKind2:
+                                    if self.vs[i]['orderBasic'] != n+1:
+                                        changedOrder.append(i)
+                                    self.es[j]['orderBasic']=n+1
+                                    self.vs[i]['orderBasic']=n+1
+                        else:
+                            if self.vs[i]['orderBasic'] != n+1:
+                                changedOrder.append(i)
+                            self.vs[i]['orderBasic']=n+1
+                    elif orderBasics.count(n+1) >= 1 and orderBasics.count(n) >= 1:
+                        if len(Gdir.neighbors(i,dir)) != 0:
+                            for j,k in zip(Gdir.adjacent(i,dir),Gdir.neighbors(i,dir)):
+                                if self.vs[k]['nkind'] == nKind or self.vs[k]['nkind'] == nKind2:
+                                    if self.vs[i]['orderBasic'] != n+1:
+                                        changedOrder.append(i)
+                                    self.es[j]['orderBasic']=n+1
+                                    self.vs[i]['orderBasic']=n+1
+                        else:
+                            if self.vs[i]['orderBasic'] != n+1:
+                                changedOrder.append(i)
+                            self.vs[i]['orderBasic']=n+1
+                    else:
+                        if len(Gdir.neighbors(i,dir)) != 0:
+                            for j,k in zip(Gdir.adjacent(i,dir),Gdir.neighbors(i,dir)):
+                                if self.vs[k]['nkind'] == nKind or self.vs[k]['nkind'] == nKind2:
+                                    if self.vs[i]['orderBasic'] != n:
+                                        changedOrder.append(i)
+                                    self.es[j]['orderBasic']=n
+                                    self.vs[i]['orderBasic']=n
+                        else:
+                            if self.vs[i]['orderBasic'] != n:
+                                changedOrder.append(i)
+                            self.vs[i]['orderBasic']=n
+            if boolInEdgesPresent == 0:
+                break
+
+    #--------------------------------------------------------------------------                                                   
+
+    def strahlerCapBed(self):
+        """Computes the basic strahler order for the capillary bed
+        INPUT: None
+        OUTPUT: edgeAttribute 'orderBasic'
+        """
+
+        Gdir=deepcopy(self)
+        
+        if 'orderBasicCap' not in self.es.attribute_names():
+            self.es['orderBasicCap'] = [-1 for e in self.es]
+        if 'orderBasicCap' not in self.vs.attribute_names():
+            self.vs['orderBasicCap'] = [-1 for e in self.es]
+        
+        dir='out'
+        dir2='in'
+        
+        capStarts=[]
+        for i in self.vs(nkind_eq=2).indices:
+            for j,k in zip(self.neighbors(i),self.adjacent(i)):
+                if self.vs[j]['nkind'] == 4:
+                    capStarts.append(i)
+                    self.es[k]['orderBasicCap'] = 0
+                    self.vs[i]['orderBasicCap'] = 0
+        
+        #TODO abbruch kriterium fuer assigning orders
+        Gdir.to_directed_flow_based()
+        for n in range(100000):
+            changedOrder=[0,0]
+            #boolInEdgesPresent=0
+            boolInEdgesPresent=1
+            while len(changedOrder) != 0:
+                changedOrder=[]
+                verts=self.vs(orderBasicCap_eq=n,nkind_eq=4).indices+self.vs(orderBasicCap_eq=n,nkind_eq=2).indices
+                verts2=[]
+                for i in verts:
+                    for k in Gdir.neighbors(i,dir):
+                        if self.vs[k]['nkind'] == 4 or self.vs[k]['nkind'] == 3 or self.vs[k]['nkind'] == 1:
+                            verts2.append(k)
+                verts2=np.unique(verts2) 
+                for i in verts2:
+                    i=int(i)
+                    orderBasicsCap=[]
+                    for j in Gdir.adjacent(i,'in'):
+                        orderBasicsCap.append(self.es[j]['orderBasicCap'])
+                    #for j,k in zip(Gdir.adjacent(i,'out'),Gdir.neighbors(i,'out')):
+                    #    if self.vs[k]['nkind'] == 4:
+                    #        boolInEdgesPresent=1
+                    if orderBasicsCap.count(n) >= 2:
+                        for j,k in zip(Gdir.adjacent(i,'out'),Gdir.neighbors(i,'out')):
+                            if self.vs[k]['nkind'] == 4:
+                                if self.vs[i]['orderBasicCap'] != n+1:
+                                    changedOrder.append(i)
+                                self.es[j]['orderBasicCap']=n+1
+                                self.vs[i]['orderBasicCap']=n+1
+                            elif self.vs[k]['nkind'] == 3 or self.vs[k]['nkind'] == 1:
+                                if self.vs[i]['orderBasicCap'] != n+1:
+                                    changedOrder.append(i)
+                                self.es[j]['orderBasicCap']=n+1
+                                self.vs[i]['orderBasicCap']=n+1
+                    elif orderBasicsCap.count(n+1) >= 1 and orderBasicsCap.count(n) >= 1:
+                        for j,k in zip(Gdir.adjacent(i,'out'),Gdir.neighbors(i,'out')):
+                            if self.vs[k]['nkind'] == 4:
+                                if self.vs[i]['orderBasicCap'] != n+1:
+                                    changedOrder.append(i)
+                                self.es[j]['orderBasicCap']=n+1
+                                self.vs[i]['orderBasicCap']=n+1
+                            elif self.vs[k]['nkind'] == 3 or self.vs[k]['nkind'] == 1:
+                                if self.vs[i]['orderBasicCap'] != n+1:
+                                    changedOrder.append(i)
+                                self.es[j]['orderBasicCap']=n+1
+                                self.vs[i]['orderBasicCap']=n+1
+                    else:
+                        for j,k in zip(Gdir.adjacent(i,'out'),Gdir.neighbors(i,'out')):
+                            if self.vs[k]['nkind'] == 4:
+                                if self.vs[i]['orderBasicCap'] != n:
+                                    changedOrder.append(j)
+                                self.es[j]['orderBasicCap']=n
+                                self.vs[i]['orderBasicCap']=n
+                            elif self.vs[k]['nkind'] == 3 or self.vs[k]['nkind'] == 1:
+                                if self.vs[i]['orderBasicCap'] != n:
+                                    changedOrder.append(i)
+                                self.es[j]['orderBasicCap']=n
+                                self.vs[i]['orderBasicCap']=n
+            if boolInEdgesPresent == 0:
+                break
 

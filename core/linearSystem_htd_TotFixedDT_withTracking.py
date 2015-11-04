@@ -127,8 +127,16 @@ class LinearSystemHtdTotFixedDTTrack(object):
         htd2htt=self._P.discharge_to_tube_hematocrit
         htt2htd = self._P.tube_to_discharge_hematocrit
 
+        if kwargs.has_key('species'):
+            self._species = kwargs['species']
+        else:
+            self._species = 'rat'
+
+        print('Species')
+        print(self._species)
+
         if kwargs.has_key('analyzeBifEvents'):
-            self._analyzeBifEvents=kwargs['analyzeBifEvents']
+            self._analyzeBifEvents = kwargs['analyzeBifEvents']
         else:
             self._analyzeBifEvents = 0
 
@@ -180,7 +188,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
         print('Total network volume calculated')
 
         # Compute the edge-specific minimal RBC distance:
-        vrbc = self._P.rbc_volume()
+        vrbc = self._P.rbc_volume(self._species)
         if self._innerDiam: 
             G.es['minDist'] = [vrbc / (np.pi * e['diameter']**2 / 4) for e in G.es]
         else:
@@ -213,8 +221,8 @@ class LinearSystemHtdTotFixedDTTrack(object):
 
         # Arterial-side inflow:
         if init:
-            if 'htdBC' in G.es.attribute_names():
-               G.es['httBC']=[e['htdBC'] if e['htdBC'] == None else \
+            if 'htdBC' in G.es.attribute_names() and 'httBC' not in G.es.attribute_names():
+                G.es['httBC']=[e['htdBC'] if e['htdBC'] == None else \
                     self._P.discharge_to_tube_hematocrit(e['htdBC'],e['diameter'],invivo) for e in G.es()]
             if not 'httBC' in G.es.attribute_names():
                 for vi in G['av']:
@@ -223,10 +231,10 @@ class LinearSystemHtdTotFixedDTTrack(object):
                                                 G.es[ei]['diameter'], 'a')
 
         #Convert tube hematocrit boundary condition to htdBC (in case it does not already exist)
-        if not 'htdBC' in G.es.attribute_names():
-           G.es['htdBC']=[e['httBC'] if e['httBC'] == None else \
-                self._P.tube_to_discharge_hematocrit(e['httBC'],e['diameter'],invivo) for e in G.es()]
-        print('Htt BC assigned')
+        #if not 'htdBC' in G.es.attribute_names():
+        #   G.es['htdBC']=[e['httBC'] if e['httBC'] == None else \
+        #        self._P.tube_to_discharge_hematocrit(e['httBC'],e['diameter'],invivo) for e in G.es()]
+        #print('Htt BC assigned')
 
         httBC_edges = G.es(httBC_ne=None).indices
         #Save initial value of httBC
@@ -276,6 +284,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
         else:
             penetratingA=[]
 
+        #TODO this is fixed for 
         if penetratingA==[]:
             srxtmBC_indexOrig=[270, 448, 388, 571, 393, 402, 362, 364, 490, 3317, 358]
             srxtmVertexPA=[]
@@ -321,7 +330,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
         # Compute the current tube hematocrit from the RBC positions:
         for e in G.es:
             e['htt']=min(len(e['rRBC'])*vrbc/e['volume'],1)
-            e['htd']=min(htt2htd(e['htt'], e['diameter'], invivo), 0.95)
+            e['htd']=min(htt2htd(e['htt'], e['diameter'], invivo), 1.0)
         print('Initial htt and htd computed')        
 
         # This initializes the full LS. Later, only relevant parts of
@@ -401,7 +410,10 @@ class LinearSystemHtdTotFixedDTTrack(object):
         """
         #mean_LD=0.28
         mean_LD=httBC
-        std_LD=0.1
+        std_LD=0.1*mean_LD
+        #std_LD=0.1*mean_LD
+        #if std_LD > 0.01:
+        #    std_LD = 0.01
         
         #PDF log-normal
         f_x = lambda x,mu,sigma: 1./(x*np.sqrt(2*np.pi)*sigma)*np.exp(-1*(np.log(x)-mu)**2/(2*sigma**2))
@@ -469,30 +481,6 @@ class LinearSystemHtdTotFixedDTTrack(object):
 
     #--------------------------------------------------------------------------
 
-    def _update_minDist_and_nMax(self, esequence=None):
-        """Updates the length of the RBCs for each edge and the maximal Number
-		of RBCs for each edge
-        INPUT: es: Sequence of edge indices as tuple. If not provided, all 
-                   edges are updated.
-        OUTPUT: None, the edge properties 'nMax' and 'minDist'
-                are updated (or created).
-        """
-        G = self._G
-
-        if esequence is None:
-            es = G.es
-        else:
-            es = G.es(esequence)
-        # Compute the edge-specific minimal RBC distance:
-        vrbc = self._P.rbc_volume()
-        G.es['nMax'] = [np.pi * e['diameter']**2 / 4 * e['length'] / vrbc
-                        for e in G.es]
-        G.es['minDist'] = [e['length'] / e['nMax'] for e in G.es]
-
-	self._G=G
-
-    #--------------------------------------------------------------------------
-
     def _update_hematocrit(self, esequence=None):
         """Updates the tube hematocrit of a given edge sequence.
         INPUT: es: Sequence of edge indices as tuple. If not provided, all 
@@ -502,7 +490,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
         G = self._G
         htt2htd = self._P.tube_to_discharge_hematocrit
         invivo=self._invivo
-        vrbc = self._P.rbc_volume()
+        vrbc = self._P.rbc_volume(self._species)
 
         if esequence is None:
             es = G.es
@@ -510,7 +498,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
             es = G.es(esequence)
 
         es['htt'] = [min(e['nRBC'] * vrbc / e['volume'],1) for e in es]
-        es['htd']= [min(htt2htd(e['htt'], e['diameter'], invivo), 0.95) for e in es]
+        es['htd']= [min(htt2htd(e['htt'], e['diameter'], invivo), 1.0) for e in es]
 
         self._G=G
 
@@ -559,7 +547,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
                 one of [-1, 0, 1])
         """
         G = self._G
-        if 'sign' in G.es.attributes():
+        if 'sign' in G.es.attributes() and None not in G.es['sign']:
             G.es['signOld']=G.es['sign']
         G.es['sign'] = [np.sign(G.vs[source]['pressure'] -
                                 G.vs[target]['pressure']) for source,target in zip(G.es['source'],G.es['target'])]
@@ -638,6 +626,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
                         print(G.es[edgeVI]['v_last'])
                     elif len(inE) == 0 and len(outE) == 0:
                         print('WARNING changed to noFlow edge')
+                        edgeVI=G.adjacent(vI)[0]
                         noFlowV.append(vI)
                         noFlowE.append(edgeVI)
                     else:
@@ -661,7 +650,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
                                 G.es[edgeVI]['posFirst_last']=G.es['length'][edgeVI]-G.es['rRBC'][edgeVI][-1]
                         else:
                             G.es[edgeVI]['posFirst_last']=G.es['length'][edgeVI]
-                        G.es[edgeVI]['v_last']=0
+                        G.es[edgeVI]['v_last']=G.es['v'][edgeVI]
                         print(G.es[edgeVI]['v_last'])
                     elif len(inE) == 0 and len(outE) == 0:
                         print('WARNING changed to noFlow edge')
@@ -728,6 +717,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
             del(G['dConnectV'])
         #Every Time Step
         else:
+            print('Vtype reupdated')
             print('Update_Out_and_inflows')
             if G.es['sign']!=G.es['signOld']:
                 sign=np.array(G.es['sign'])
@@ -872,6 +862,14 @@ class LinearSystemHtdTotFixedDTTrack(object):
                             G.es[edgeVI]['v_last']=G.es[edgeVI]['v']
                             G.vs[vI]['inflowE']=inE
                             G.vs[vI]['outflowE']=outE
+                            if G.es[edgeVI]['logNormal'] == None:
+                                httBCValue=G.es[edgeVI]['httBC_init']
+                                if self._innerDiam:
+                                    LDValue = httBCValue
+                                else:
+                                    LDValue=httBCValue*(G.es[edgeVI]['diameter']/(G.es[edgeVI]['diameter']-2*eslThickness(G.es[edgeVI]['diameter'])))**2
+                                logNormalMu,logNormalSigma=self._compute_mu_sigma_inlet_RBC_distribution(LDValue)
+                                G.es[edgeVI]['logNormal']=[logNormalMu,logNormalSigma]
                     #it is now a noFlow Vertex
                     else:
                         if G.vs[vI]['degree']==1 and len(inE) == 1 and len(outE) == 0:
@@ -942,8 +940,8 @@ class LinearSystemHtdTotFixedDTTrack(object):
         G = self._G
         invivo=self._invivo
         vf = self._P.velocity_factor
-        vrbc = self._P.rbc_volume()
-        vfList=[1.0 if htt == 0.0 else max(1.,vf(d, invivo, tube_ht=htt)) for d,htt in zip(G.es['diameter'],G.es['htt'])]
+        vrbc = self._P.rbc_volume(self._species)
+        vfList=[1.0 if htt == 0.0 else max(1.0,vf(d, invivo, tube_ht=htt)) for d,htt in zip(G.es['diameter'],G.es['htt'])]
 
         self._G=run_faster.update_flow_and_v(self._G,self._invivo,vfList,vrbc)
         G= self._G
@@ -1013,8 +1011,8 @@ class LinearSystemHtdTotFixedDTTrack(object):
             edgeList=np.unique(edgeList).tolist()
             edgeList=[int(i) for i in edgeList]
             vertexList=[int(i) for i in vertexList]
-        dischargeHt = [min(htt2htd(e, d, invivo), 0.95) for e,d in zip(G.es[edgeList]['htt'],G.es[edgeList]['diameter'])]
-        G.es[edgeList]['effResistance'] =[ res * nurel(d, dHt,invivo) for res,dHt,d in zip(G.es[edgeList]['resistance'], \
+        dischargeHt = [min(htt2htd(e, d, invivo), 1.0) for e,d in zip(G.es[edgeList]['htt'],G.es[edgeList]['diameter'])]
+        G.es[edgeList]['effResistance'] =[ res * nurel(max(d,4.0), min(dHt,0.6),invivo) for res,dHt,d in zip(G.es[edgeList]['resistance'], \
             dischargeHt,G.es[edgeList]['diamCalcEff'])]
 
         edgeList = G.es(edgeList)
@@ -1097,6 +1095,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
         #SECOND step go through all edges from smallest to highest pressure and move RBCs
         for ei in sortedE:
             noBifEvents = 0
+            edgesInvolved=[] #all edges connected to the bifurcation vertex
             e = G.es[ei]
             sign=e['sign']
             #Get bifurcation vertex
@@ -1104,14 +1103,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
                 vi=e.target
             else:
                 vi=e.source
-            #edgesInvolved=[] #all edges connected to the bifurcation vertex
             edgesInvolved=G.adjacent(vi)
-            #for i in G.vs[vi]['inflowE']:
-            #     edgesInvolved.append(i)
-            #for i in G.vs[vi]['outflowE']:
-            #     edgesInvolved.append(i)
-            #nRBCSumBefore=0
-            #for i in edgesInvolved:
             nRBCSumBefore = np.sum(G.es[edgesInvolved]['nRBC'])
             overshootsNo=0 #Reset - Number of overshoots acutally taking place (considers possible number of bifurcation events)
             #If there is a BC for the edge new RBCs have to be introduced
@@ -1232,6 +1224,27 @@ class LinearSystemHtdTotFixedDTTrack(object):
                                 if position[index-1] < 0:
                                     overshootsNoReduce += 1
                             overshootsNo = overshootsNo-overshootsNoReduce
+                            position=position[-1*overshootsNo::]
+                            #Check if the RBCs overshoots RBCs present in the outflow vessel
+                            overshootsNoReduce2=0
+                            if len(oe['rRBC']) > 0:
+                                if oe['sign'] == 1 and position[-1] > oe['rRBC'][0]-oe['minDist']:
+                                    posLead=position[-1]
+                                    position = np.array(position)-np.array([posLead-(oe['rRBC'][0]-oe['minDist'])]*len(position))
+                                    for i in range(overshootsNo):
+                                        if position[i] < 0:
+                                            overshootsNoReduce2 += 1
+                                        else:
+                                            break
+                                elif oe['sign'] == -1 and position[-1] > oe['length']-oe['rRBC'][-1]-oe['minDist']:
+                                    posLead=position[-1]
+                                    position = np.array(position)-np.array([posLead-(oe['length']-oe['rRBC'][-1]-oe['minDist'])]*len(position))
+                                    for i in range(overshootsNo):
+                                        if position[i] < 0:
+                                            overshootsNoReduce2 += 1
+                                        else:
+                                            break
+                            overshootsNo = overshootsNo-overshootsNoReduce2
                             if overshootsNo == 0:
                                 position = []
                                 RBCindex = []
@@ -1300,11 +1313,11 @@ class LinearSystemHtdTotFixedDTTrack(object):
                             boolTrifurcation = 1
                         #Differ between capillaries and non-capillaries
                         if G.vs[vi]['isCap']:
-                            nonCap=0
+                            nonCap = 0
                             preferenceList = [x[1] for x in sorted(zip(np.array(G.es[outEdges]['flow'])/np.array(G.es[outEdges]['crosssection']), \
                                 outEdges), reverse=True)]
                         else:
-                            nonCap=1
+                            nonCap = 1
                             preferenceList = [x[1] for x in sorted(zip(G.es[outEdges]['flow'], outEdges), reverse=True)]
                             #Check if the divergent bifurcation has degree 4
                             if boolTrifurcation:
@@ -1375,67 +1388,56 @@ class LinearSystemHtdTotFixedDTTrack(object):
                             overshootsNo1 = np.floor(ratio1 * overshootsNo)
                             overshootsNo3 = np.floor(ratio3 * overshootsNo)
                             overshootsNo2 = overshootsNo - overshootsNo1 - overshootsNo3
-                            stuck1 = 0
-                            stuck2 = 0
-                            stuck3 = 0
                             if overshootsNo1 > posNoBifEventsPref:
-                                stuck1 = overshootsNo1 - posNoBifEventsPref
+                                if ratio2 > ratio3:
+                                    overshootsNo2 += overshootsNo1 - posNoBifEventsPref
+                                else:
+                                    overshootsNo3 += overshootsNo1 - posNoBifEventsPref
                                 overshootsNo1 = posNoBifEventsPref
                             if overshootsNo2 > posNoBifEventsPref2:
-                                stuck2 = overshootsNo2 - posNoBifEventsPref2
+                                if ratio1 > ratio3:
+                                    #possible bifurcation event > currentNewRBCs + additional RBCs from edge 2
+                                    if posNoBifEventsPref > overshootsNo1 +  (overshootsNo2 - posNoBifEventsPref2):
+                                        overshootsNo1 += overshootsNo2 - posNoBifEventsPref2
+                                    else:
+                                        overshootsNo1 = posNoBifEventsPref
+                                        if posNoBifEventsPref3 > overshootsNo - (posNoBifEventsPref + posNoBifEventsPref2):
+                                            overshootsNo3 = overshootsNo - (posNoBifEventsPref + posNoBifEventsPref2)
+                                        else:
+                                            overshootsNo3 = posNoBifEventsPref3
+                                else:
+                                    #possible bifurcation event > currentNewRBCs + additional RBCs from edge 2
+                                    if posNoBifEventsPref3 > overshootsNo3 +  (overshootsNo2 - posNoBifEventsPref2):
+                                        overshootsNo3 += overshootsNo2 - posNoBifEventsPref2
+                                    else:
+                                        overshootsNo3 = posNoBifEventsPref3
+                                        if posNoBifEventsPref > overshootsNo - (posNoBifEventsPref3 + posNoBifEventsPref2):
+                                            overshootsNo1 = overshootsNo - (posNoBifEventsPref3 + posNoBifEventsPref2)
+                                        else:
+                                            overshootsNo1 = posNoBifEventsPref
                                 overshootsNo2 = posNoBifEventsPref2
                             if overshootsNo3 > posNoBifEventsPref3:
-                                stuck3 = overshootsNo3 - posNoBifEventsPref3
-                                overshootsNo3 = posNoBifEventsPref3
-                            #Distribute to other edegs
-                            if stuck1 != 0:
-                                if overshootsNo2 < posNoBifEventsPref2:
-                                    if overshootsNo2 + stuck1 <= posNoBifEventsPref2:
-                                        overshootsNo2 += stuck1
-                                        stuck1 = 0
+                                if ratio2 > ratio1:
+                                    #possible bifurcation event > currentNewRBCs + additional RBCs from edge 3
+                                    if posNoBifEventsPref2 > overshootsNo2 +  (overshootsNo3 - posNoBifEventsPref3):
+                                        overshootsNo2 += overshootsNo3 - posNoBifEventsPref3
                                     else:
-                                        stuck1 += -(posNoBifEventsPref2 - overshootsNo2)
                                         overshootsNo2 = posNoBifEventsPref2
-                                if stuck1 != 0:
-                                    if overshootsNo3 < posNoBifEventsPref3:
-                                        if overshootsNo3 + stuck1 <= posNoBifEventsPref3:
-                                            overshootsNo3 += stuck1
-                                            stuck1 = 0
+                                        if posNoBifEventsPref > overshootsNo - (posNoBifEventsPref3 + posNoBifEventsPref2):
+                                            overshootsNo1 = overshootsNo - (posNoBifEventsPref3 + posNoBifEventsPref2)
                                         else:
-                                            stuck1 += -(posNoBifEventsPref3 - overshootsNo3)
-                                            overshootsNo3 = posNoBifEventsPref3
-                            if stuck2 != 0:
-                                if overshootsNo1 < posNoBifEventsPref:
-                                    if overshootsNo1 + stuck2 <= posNoBifEventsPref:
-                                        overshootsNo1 += stuck2
-                                        stuck2 = 0
+                                            overshootsNo1 = posNoBifEventsPref
+                                else:
+                                    #possible bifurcation event > currentNewRBCs + additional RBCs from edge 2
+                                    if posNoBifEventsPref > overshootsNo1 +  (overshootsNo3 - posNoBifEventsPref3):
+                                        overshootsNo1 += overshootsNo3 - posNoBifEventsPref3
                                     else:
-                                        stuck2 += -(posNoBifEventsPref - overshootsNo1)
                                         overshootsNo1 = posNoBifEventsPref
-                                if stuck2 != 0:
-                                    if overshootsNo3 < posNoBifEventsPref3:
-                                        if overshootsNo3 + stuck2 <= posNoBifEventsPref3:
-                                            overshootsNo3 += stuck2
-                                            stuck2 = 0
+                                        if posNoBifEventsPref2 > overshootsNo - (posNoBifEventsPref3 + posNoBifEventsPref):
+                                            overshootsNo2 = overshootsNo - (posNoBifEventsPref3 + posNoBifEventsPref)
                                         else:
-                                            stuck2 += -(posNoBifEventsPref3 - overshootsNo3)
-                                            overshootsNo3 = posNoBifEventsPref3
-                            if stuck3 != 0:
-                                if overshootsNo1 < posNoBifEventsPref:
-                                    if overshootsNo1 + stuck3 <= posNoBifEventsPref:
-                                        overshootsNo1 += stuck3
-                                        stuck3 =0
-                                    else:
-                                        stuck3 += -(posNoBifEventsPref - overshootsNo1)
-                                        overshootsNo1 = posNoBifEventsPref
-                                if stuck3 != 0:
-                                    if overshootsNo2 < posNoBifEventsPref2:
-                                        if overshootsNo2 + stuck3 <= posNoBifEventsPref2:
-                                            overshootsNo2 += stuck3
-                                            stuck3 = 0
-                                        else:
-                                            stuck3 += -(posNoBifEventsPref2 - overshootsNo2)
                                             overshootsNo2 = posNoBifEventsPref2
+                                overshootsNo3 = posNoBifEventsPref3
                             overshootsNo = int(overshootsNo1 + overshootsNo2 + overshootsNo3)
                             posNoBifEvents = overshootsNo
                             posBifRBCsIndex=[bifRBCsIndex[-posNoBifEvents::] if sign == 1.0 \
@@ -1573,7 +1575,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
                                                     positionPref3.append(position3[index3])
                                                 counterPref3.append(index)
                                                 countNo3 += 1
-                                                last = 2
+                                                last = 3
                                             else:
                                                 print('BIGERROR all overshootRBCS should fit')
                                     elif last == 1:
@@ -1906,7 +1908,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
                                             positionPref3[0] = oe3['length']
                                             for i in range(len(positionPref3)-1):
                                                 if positionPref3[i]-positionPref3[i+1] < oe3['minDist'] + eps:
-                                                    positionPref2[i+1]=positionPref3[i] - oe3['minDist']
+                                                    positionPref3[i+1]=positionPref3[i] - oe3['minDist']
                                                 else:
                                                     break
                                             if positionPref3[-1] < 0:
@@ -3016,7 +3018,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
                             count2=inEdge.count(2)
                             count3=inEdge.count(3)
                             #position starts with least overshooting RBC and ends with highest overshooting RBC
-                            position=np.array(overshootTime)*np.array([G.es[outE]['v']]*overshootsNo)
+                            position=np.array(overshootTime)*np.array([oe['v']]*overshootsNo)
                             #Check if RBCs are to close to each other
                             #Check if the RBCs runs into an old one in the vessel
                             #(only position of the leading RBC is changed)
@@ -3032,7 +3034,8 @@ class LinearSystemHtdTotFixedDTTrack(object):
                                 if position[-1] > oe['length']:
                                     position[-1]=oe['length']
                             #Position of the following RBCs is changed, such that they do not overlap
-                            for i in range(-1,-1*(count1+count2+count3),-1):
+                            allCounts=count1+count2+count3
+                            for i in range(-1,-1*allCounts,-1):
                                 if position[i]-position[i-1] < oe['minDist'] or \
                                     position[i-1] > position[i]:
                                     position[i-1]=position[i]-oe['minDist']
@@ -3085,7 +3088,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
                                 else:
                                     e2['rRBC']=e2['rRBC'][count2::]
                                     e2['RBCindex']=e2['RBCindex'][count2::]
-                            if len(inflowEdges) > 2:
+                            if boolTrifurcation:
                                 if noBifEvents3 > 0 and count3 > 0:
                                     #Remove RBCs from old Edge 3
                                     if sign3 == 1.0:
@@ -4067,6 +4070,9 @@ class LinearSystemHtdTotFixedDTTrack(object):
                                         if count >= noStuckRBCs2+1 and moved == 0:
                                             break
             #-------------------------------------------------------------------------------------------
+            rRBC = []
+            rRBC2 = []
+            rRBC3 = []
             if e['httBC'] is not None:
                 boolHttEdge = 1
                 rRBC = []
@@ -4085,6 +4091,8 @@ class LinearSystemHtdTotFixedDTTrack(object):
                     cum_length = e['posFirst_last'] + e['v_last'] * dt
                     posFirst = cum_length
                     e['posFirst_last']=posFirst
+                    if e['v'] > e['v_last']:
+                        e['v_last']=e['v']
                     #e['v_last']=e['v']
                 while cum_length >= lrbc and nMaxNew > 0:
                     if len(e['keep_rbcs']) != 0:
@@ -4099,7 +4107,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
                             cum_length = posFirst
                             e['keep_rbcs']=[]
                             e['posFirst_last']=posFirst
-                            e['v_last']=e['v']
+                            #e['v_last']=e['v']
                             RBCindexCurrent += 1
                             RBCindex.append(RBCindexCurrent)
                         else:
@@ -4119,17 +4127,21 @@ class LinearSystemHtdTotFixedDTTrack(object):
                             nMaxNew += -1
                             cum_length = posFirst
                             e['posFirst_last']=posFirst
-                            e['v_last']=e['v']
+                            #e['v_last']=e['v']
                             RBCindexCurrent += 1
                             RBCindex.append(RBCindexCurrent)
                         else:
                             e['keep_rbcs']=[spacing]
-                            e['v_last']=e['v']
+                            #e['v_last']=e['v']
                             if len(rRBC) == 0:
                                 e['posFirst_last']=posFirst
                             else:
                                 e['posFirst_last']=rRBC[-1]
                             break
+                if len(e['keep_rbcs']) == 0:
+                    number=np.exp(e['logNormal'][0]+e['logNormal'][1]*np.random.randn(1)[0])
+                    spacing = lrbc+lrbc*number
+                    e['keep_rbcs']=[spacing]
                 rRBC = np.array(rRBC)
                 if e.index in self._penetratingA:
                     trackRBCs=trackRBCs + RBCindex
@@ -4168,6 +4180,8 @@ class LinearSystemHtdTotFixedDTTrack(object):
                         else:
                             cum_length = e2['posFirst_last'] + e2['v_last'] * dt
                             posFirst = cum_length
+                            if e2['v'] > e2['v_last']:
+                                e2['v_last']=e2['v']
                             e2['posFirst_last']=posFirst
                         while cum_length >= lrbc and nMaxNew > 0:
                             if len(e2['keep_rbcs']) != 0:
@@ -4182,13 +4196,13 @@ class LinearSystemHtdTotFixedDTTrack(object):
                                     cum_length = posFirst
                                     e2['keep_rbcs']=[]
                                     e2['posFirst_last']=posFirst
-                                    e2['v_last']=e2['v']
+                                    #e2['v_last']=e2['v']
                                     RBCindexCurrent += 1
                                     RBCindex2.append(RBCindexCurrent)
                                 else:
                                     if len(e2['rRBC']) > 0:
                                         e2['posFirst_last'] = posFirst
-                                        e2['v_last']=e2['v']
+                                        #e2['v_last']=e2['v']
                                     break
                             else:
                                 #number of RBCs randomly chosen to average htt
@@ -4204,17 +4218,21 @@ class LinearSystemHtdTotFixedDTTrack(object):
                                     nMaxNew += -1
                                     cum_length = posFirst
                                     e2['posFirst_last']=posFirst
-                                    e2['v_last']=e2['v']
+                                    #e2['v_last']=e2['v']
                                     RBCindexCurrent += 1
                                     RBCindex2.append(RBCindexCurrent)
                                 else:
                                     e2['keep_rbcs']=[spacing]
-                                    e2['v_last']=e2['v']
+                                    #e2['v_last']=e2['v']
                                     if len(rRBC2) == 0:
                                         e2['posFirst_last']=posFirst
                                     else:
                                         e2['posFirst_last']=rRBC2[-1]
                                     break
+                        if len(e2['keep_rbcs']) == 0:
+                            number=np.exp(e2['logNormal'][0]+e2['logNormal'][1]*np.random.randn(1)[0])
+                            spacing = lrbc+lrbc*number
+                            e2['keep_rbcs']=[spacing]
                         rRBC2 = np.array(rRBC2)
                         if e2.index in self._penetratingA:
                             trackRBCs=trackRBCs + RBCindex2
@@ -4233,7 +4251,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
                                 vertexUpdate.append(e2.target)
                                 vertexUpdate.append(e2.source)
                                 edgeUpdate.append(e2.index)
-                    if G.vs[vi]['vType']==4 and boolTrifurcation > 2:
+                    if G.vs[vi]['vType']==4 and boolTrifurcation:
                         #Check if httBC exists
                         boolHttEdge3 = 0
                         if e3['httBC'] is not None:
@@ -4252,6 +4270,8 @@ class LinearSystemHtdTotFixedDTTrack(object):
                             else:
                                 cum_length = e3['posFirst_last'] + e3['v_last'] * dt
                                 posFirst = cum_length
+                                if e3['v'] > e3['v_last']:
+                                    e3['v_last']=e3['v']
                                 e3['posFirst_last']=posFirst
                             while cum_length >= lrbc and nMaxNew > 0:
                                 if len(e3['keep_rbcs']) != 0:
@@ -4266,13 +4286,13 @@ class LinearSystemHtdTotFixedDTTrack(object):
                                         cum_length = posFirst
                                         e3['keep_rbcs']=[]
                                         e3['posFirst_last']=posFirst
-                                        e3['v_last']=e3['v']
+                                        #e3['v_last']=e3['v']
                                         RBCindexCurrent += 1
                                         RBCindex3.append(RBCindexCurrent)
                                     else:
                                         if len(e3['rRBC']) > 0:
                                             e3['posFirst_last'] = posFirst
-                                            e3['v_last']=e3['v']
+                                            #e3['v_last']=e3['v']
                                         break
                                 else:
                                     #number of RBCs randomly chosen to average htt
@@ -4288,17 +4308,21 @@ class LinearSystemHtdTotFixedDTTrack(object):
                                         nMaxNew += -1
                                         cum_length = posFirst
                                         e3['posFirst_last']=posFirst
-                                        e3['v_last']=e3['v']
+                                        #e3['v_last']=e3['v']
                                         RBCindexCurrent += 1
                                         RBCindex3.append(RBCindexCurrent)
                                     else:
                                         e3['keep_rbcs']=[spacing]
-                                        e3['v_last']=e3['v']
+                                        #e3['v_last']=e3['v']
                                         if len(rRBC3) == 0:
                                             e3['posFirst_last']=posFirst
                                         else:
                                             e3['posFirst_last']=rRBC3[-1]
                                         break
+                            if len(e3['keep_rbcs']) == 0:
+                                number=np.exp(e3['logNormal'][0]+e3['logNormal'][1]*np.random.randn(1)[0])
+                                spacing = lrbc+lrbc*number
+                                e3['keep_rbcs']=[spacing]
                             rRBC3 = np.array(rRBC3)
                             if e3.index in self._penetratingA:
                                 trackRBCs=trackRBCs + RBCindex3
@@ -4500,7 +4524,6 @@ class LinearSystemHtdTotFixedDTTrack(object):
         self._vertexUpdate=np.unique(vertexUpdate)
         edgeUpdate=np.unique(edgeUpdate)
         self._edgeUpdate=edgeUpdate.tolist()
-        nRBC=G.es['nRBC']
         G.es['nRBC'] = [len(e['rRBC']) for e in G.es]
         if self._analyzeBifEvents:
             self._rbcsMovedPerEdge.append(rbcsMovedPerEdge)

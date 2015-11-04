@@ -113,7 +113,6 @@ class LinearSystemHtdTotFixedDT(object):
         G.es['diamCalcEff']=[i if i >= 3. else 3.0 for i in G.es['diameter'] ]
         G.es['keep_rbcs']=[[] for i in range(G.ecount())]
         adjacent=[]
-        self._spacing=[]
         for i in range(G.vcount()):
             adjacent.append(G.adjacent(i))
         G.vs['adjacent']=adjacent
@@ -217,7 +216,7 @@ class LinearSystemHtdTotFixedDT(object):
 
         # Arterial-side inflow:
         if init:
-            if 'htdBC' in G.es.attribute_names():
+            if 'htdBC' in G.es.attribute_names() and 'httBC' not in G.es.attribute_names():
                 G.es['httBC']=[e['htdBC'] if e['htdBC'] == None else \
                     self._P.discharge_to_tube_hematocrit(e['htdBC'],e['diameter'],invivo) for e in G.es()]
             if not 'httBC' in G.es.attribute_names():
@@ -227,9 +226,9 @@ class LinearSystemHtdTotFixedDT(object):
                                                 G.es[ei]['diameter'], 'a')
 
         #Convert tube hematocrit boundary condition to htdBC (in case it does not already exist)
-        if not 'htdBC' in G.es.attribute_names():
-           G.es['htdBC']=[e['httBC'] if e['httBC'] == None else \
-                self._P.tube_to_discharge_hematocrit(e['httBC'],e['diameter'],invivo) for e in G.es()]
+        #if not 'htdBC' in G.es.attribute_names():
+        #   G.es['htdBC']=[e['httBC'] if e['httBC'] == None else \
+        #        self._P.tube_to_discharge_hematocrit(e['httBC'],e['diameter'],invivo) for e in G.es()]
         print('Htt BC assigned')
 
         httBC_edges = G.es(httBC_ne=None).indices
@@ -331,9 +330,9 @@ class LinearSystemHtdTotFixedDT(object):
         self._update_out_and_inflows_for_vertices()
         print('updated out and inflows')
 
-        Gdummy=deepcopy(G)
         #Find upstream divergent bifurcations
         if self._capDil != 0:
+            Gdummy=deepcopy(G)
             Gdummy.to_directed_flow_based()
             e=Gdummy.es[self._capDil]
             self._upstreamDivBifs=[]
@@ -395,8 +394,8 @@ class LinearSystemHtdTotFixedDT(object):
             print('upstreamDivBifs')
             print(self._upstreamDivBifs)
             print(self._DivBifEdges)
-             
-        del(Gdummy)
+            del(Gdummy)
+
         #Calculate an estimated network turnover time (based on conditions at the beginning)
         flowsum=0
 
@@ -425,7 +424,11 @@ class LinearSystemHtdTotFixedDT(object):
         """
         #mean_LD=0.28
         mean_LD=httBC
-        std_LD=0.1
+        std_LD=0.1*mean_LD
+        #std_LD=0.1*mean_LD
+        #if std_LD > 0.01:
+        #    std_LD = 0.01
+
         
         #PDF log-normal
         f_x = lambda x,mu,sigma: 1./(x*np.sqrt(2*np.pi)*sigma)*np.exp(-1*(np.log(x)-mu)**2/(2*sigma**2))
@@ -662,7 +665,7 @@ class LinearSystemHtdTotFixedDT(object):
                                 G.es[edgeVI]['posFirst_last']=G.es['length'][edgeVI]-G.es['rRBC'][edgeVI][-1]
                         else:
                             G.es[edgeVI]['posFirst_last']=G.es['length'][edgeVI]
-                        G.es[edgeVI]['v_last']=0
+                        G.es[edgeVI]['v_last']=G.es['v'][edgeVI]
                         print(G.es[edgeVI]['v_last'])
                     elif len(inE) == 0 and len(outE) == 0:
                         print('WARNING changed to noFlow edge')
@@ -874,6 +877,14 @@ class LinearSystemHtdTotFixedDT(object):
                             G.es[edgeVI]['v_last']=G.es[edgeVI]['v']
                             G.vs[vI]['inflowE']=inE
                             G.vs[vI]['outflowE']=outE
+                            if G.es[edgeVI]['logNormal'] == None:
+                                httBCValue=G.es[edgeVI]['httBC_init']
+                                if self._innerDiam:
+                                    LDValue = httBCValue
+                                else:
+                                    LDValue=httBCValue*(G.es[edgeVI]['diameter']/(G.es[edgeVI]['diameter']-2*eslThickness(G.es[edgeVI]['diameter'])))**2
+                                logNormalMu,logNormalSigma=self._compute_mu_sigma_inlet_RBC_distribution(LDValue)
+                                G.es[edgeVI]['logNormal']=[logNormalMu,logNormalSigma]
                     #it is now a noFlow Vertex
                     else:
                         if G.vs[vI]['degree']==1 and len(inE) == 1 and len(outE) == 0:
@@ -1091,7 +1102,7 @@ class LinearSystemHtdTotFixedDT(object):
         sortedE=zip(pOut,edgeList0)
         sortedE.sort()
         sortedE=[i[1] for i in sortedE]
-        convEdges2=[]
+        convEdges2=[0]*G.ecount()
         edgeUpdate=[]   #Edges where the number of RBCs changed --> need to be updated
         vertexUpdate=[] #Vertices where the number of RBCs changed in adjacent edges --> need to be updated
         #SECOND step go through all edges from smallest to highest pressure and move RBCs
@@ -1105,13 +1116,12 @@ class LinearSystemHtdTotFixedDT(object):
                 vi=e.target
             else:
                 vi=e.source
-            for i in G.vs[vi]['inflowE']:
-                 edgesInvolved.append(i)
-            for i in G.vs[vi]['outflowE']:
-                 edgesInvolved.append(i)
-            nRBCSumBefore=0
-            for i in edgesInvolved:
-                nRBCSumBefore += G.es[i]['nRBC']
+            edgesInvolved=G.adjacent(vi)
+            print('Current vertex')
+            print(G.vs[vi]['inflowE'])
+	    print(G.vs[vi]['outflowE'])
+            print(edgesInvolved)
+            nRBCSumBefore = np.sum(G.es[edgesInvolved]['nRBC'])
             overshootsNo=0 #Reset - Number of overshoots acutally taking place (considers possible number of bifurcation events)
             #If there is a BC for the edge new RBCs have to be introduced
             #Check if the RBCs in the edge have been moved already (--> convergent bifurcation)
@@ -1119,10 +1129,9 @@ class LinearSystemHtdTotFixedDT(object):
             boolHttEdge = 0
             boolHttEdge2 = 0
             boolHttEdge3 = 0
-            if ei not in convEdges2 and G.vs[vi]['vType'] != 7:
+            if convEdges2[ei] == 0 and G.vs[vi]['vType'] != 7:
             #Check if the RBCs in the edge have been moved already (--> convergent bifurcation)
             #Recheck if bifurcation vertex is a noFlow Vertex (vType=7)
-            #if ei not in convEdges2 and G.vs[vi]['vType'] != 7:
                 #If RBCs are present move all RBCs
                 if len(e['rRBC']) > 0:
                     e['rRBC'] = e['rRBC'] + e['v'] * dt * e['sign']
@@ -1150,7 +1159,7 @@ class LinearSystemHtdTotFixedDT(object):
                     noBifEvents = 0
                 #Convergent Edge without a bifurcation event
                 if noBifEvents == 0 and G.vs[vi]['vType']==4:
-                    convEdges2.append(ei)
+                    convEdges2[ei]=1
         #-------------------------------------------------------------------------------------------
                 #Check if a bifurcation event is taking place
                 if noBifEvents > 0:
@@ -1205,6 +1214,13 @@ class LinearSystemHtdTotFixedDT(object):
                             if len(oe['rRBC']) == 0:
                                 if position[-1] > oe['length']:
                                     position = np.array(position)-np.array([position[-1]-oe['length']]*len(position))
+                            else:
+                                if oe['sign'] == 1 and position[-1] > oe['rRBC'][0]-oe['minDist']:
+                                    posLead=position[-1]
+                                    position = np.array(position)-np.array([posLead-(oe['rRBC'][0]-oe['minDist'])]*len(position))
+                                elif oe['sign'] == -1 and position[-1] > oe['length']-oe['rRBC'][-1]-oe['minDist']:
+                                    posLead=position[-1]
+                                    position = np.array(position)-np.array([posLead-(oe['length']-oe['rRBC'][-1]-oe['minDist'])]*len(position))
                             #Maxmimum number of overshoots possible is infact limited by the overshootDistance of the first RBC
                             #If the RBCs travel with the same speed than the bulk flow this check is not necessary
 			    #BUT due to different velocity factors RBCs cann "ran into each other" at connecting bifurcations
@@ -1290,11 +1306,11 @@ class LinearSystemHtdTotFixedDT(object):
                     #if vertex is divergent vertex
                     elif G.vs[vi]['vType'] == 3:
                         outEdges=G.vs[vi]['outflowE']
-                        outE=outEdges[0]
-                        outE2=outEdges[1]
-                        #Check if there are two or three outEdgs
+                        boolTrifurcation = 0
                         if len(outEdges) > 2:
-                            outE3=outEdges[2]
+                            boolTrifurcation = 1
+                        #Check if there are two or three outEdgs
+                        print('its a divergent bifurcation')
                         #Differ between capillaries and non-capillaries
                         if G.vs[vi]['isCap']:
                             nonCap = 0
@@ -1304,7 +1320,7 @@ class LinearSystemHtdTotFixedDT(object):
                             nonCap = 1
                             preferenceList = [x[1] for x in sorted(zip(G.es[outEdges]['flow'], outEdges), reverse=True)]
                             #Check if the divergent bifurcation has degree 4
-                            if len(outEdges) > 2:
+                            if boolTrifurcation:
                                 ratio1 = G.es[preferenceList[0]]['flow']/e['flow']
                                 ratio2 = G.es[preferenceList[1]]['flow']/e['flow']
                                 ratio3 = G.es[preferenceList[2]]['flow']/e['flow']
@@ -1318,7 +1334,7 @@ class LinearSystemHtdTotFixedDT(object):
                         outEPref2=preferenceList[1]
                         oe=G.es[outEPref]
                         oe2=G.es[outEPref2]
-                        if len(outEdges) > 2:
+                        if boolTrifurcation:
                             outEPref3 = preferenceList[2]
                             oe3=G.es[outEPref3]
                         #Calculate distance to first RBC for outEPref
@@ -1334,7 +1350,7 @@ class LinearSystemHtdTotFixedDT(object):
                         else:
                             distToFirst2=oe2['length']
                         #Calculate distance to first RBC for outEPref3 (if it exists)
-                        if len(outEdges) > 2:
+                        if boolTrifurcation:
                             if len(oe3['rRBC']) > 0:
                                 distToFirst3=oe3['rRBC'][0] if oe3['sign'] == 1.0 \
                                     else oe3['length']-oe3['rRBC'][-1]
@@ -1349,7 +1365,7 @@ class LinearSystemHtdTotFixedDT(object):
                         if posNoBifEventsPref2 + len(oe2['rRBC']) > oe2['nMax']:
                             posNoBifEventsPref2 = oe2['nMax'] - len(oe2['rRBC'])
                         #Check how many RBCs are allowed by nMax for outEPref3
-                        if len(outEdges) > 2:
+                        if boolTrifurcation:
                             posNoBifEventsPref3=np.floor(distToFirst3/oe3['minDist'])
                             if posNoBifEventsPref3 + len(oe3['rRBC']) > oe3['nMax']:
                                 posNoBifEventsPref3 = oe3['nMax'] - len(oe3['rRBC'])
@@ -1373,10 +1389,54 @@ class LinearSystemHtdTotFixedDT(object):
                             overshootsNo3 = np.floor(ratio3 * overshootsNo)
                             overshootsNo2 = overshootsNo - overshootsNo1 - overshootsNo3
                             if overshootsNo1 > posNoBifEventsPref:
+                                if ratio2 > ratio3:
+                                    overshootsNo2 += overshootsNo1 - posNoBifEventsPref
+                                else:
+                                    overshootsNo3 += overshootsNo1 - posNoBifEventsPref
                                 overshootsNo1 = posNoBifEventsPref
                             if overshootsNo2 > posNoBifEventsPref2:
+                                if ratio1 > ratio3:
+                                    #possible bifurcation event > currentNewRBCs + additional RBCs from edge 2
+                                    if posNoBifEventsPref > overshootsNo1 +  (overshootsNo2 - posNoBifEventsPref2):
+                                        overshootsNo1 += overshootsNo2 - posNoBifEventsPref2
+                                    else:
+                                        overshootsNo1 = posNoBifEventsPref
+                                        if posNoBifEventsPref3 > overshootsNo - (posNoBifEventsPref + posNoBifEventsPref2):
+                                            overshootsNo3 = overshootsNo - (posNoBifEventsPref + posNoBifEventsPref2)
+                                        else:
+                                            overshootsNo3 = posNoBifEventsPref3
+                                else:
+                                    #possible bifurcation event > currentNewRBCs + additional RBCs from edge 2
+                                    if posNoBifEventsPref3 > overshootsNo3 +  (overshootsNo2 - posNoBifEventsPref2):
+                                        overshootsNo3 += overshootsNo2 - posNoBifEventsPref2
+                                    else:
+                                        overshootsNo3 = posNoBifEventsPref3
+                                        if posNoBifEventsPref > overshootsNo - (posNoBifEventsPref3 + posNoBifEventsPref2):
+                                            overshootsNo1 = overshootsNo - (posNoBifEventsPref3 + posNoBifEventsPref2)
+                                        else:
+                                            overshootsNo1 = posNoBifEventsPref
                                 overshootsNo2 = posNoBifEventsPref2
                             if overshootsNo3 > posNoBifEventsPref3:
+                                if ratio2 > ratio1:
+                                    #possible bifurcation event > currentNewRBCs + additional RBCs from edge 3
+                                    if posNoBifEventsPref2 > overshootsNo2 +  (overshootsNo3 - posNoBifEventsPref3):
+                                        overshootsNo2 += overshootsNo3 - posNoBifEventsPref3
+                                    else:
+                                        overshootsNo2 = posNoBifEventsPref2
+                                        if posNoBifEventsPref > overshootsNo - (posNoBifEventsPref3 + posNoBifEventsPref2):
+                                            overshootsNo1 = overshootsNo - (posNoBifEventsPref3 + posNoBifEventsPref2)
+                                        else:
+                                            overshootsNo1 = posNoBifEventsPref
+                                else:
+                                    #possible bifurcation event > currentNewRBCs + additional RBCs from edge 2
+                                    if posNoBifEventsPref > overshootsNo1 +  (overshootsNo3 - posNoBifEventsPref3):
+                                        overshootsNo1 += overshootsNo3 - posNoBifEventsPref3
+                                    else:
+                                        overshootsNo1 = posNoBifEventsPref
+                                        if posNoBifEventsPref2 > overshootsNo - (posNoBifEventsPref3 + posNoBifEventsPref):
+                                            overshootsNo2 = overshootsNo - (posNoBifEventsPref3 + posNoBifEventsPref)
+                                        else:
+                                            overshootsNo2 = posNoBifEventsPref2
                                 overshootsNo3 = posNoBifEventsPref3
                             overshootsNo = int(overshootsNo1 + overshootsNo2 + overshootsNo3)
                             posNoBifEvents = overshootsNo
@@ -1404,7 +1464,7 @@ class LinearSystemHtdTotFixedDT(object):
                             else:
                                 position2=np.array([oe2['length']]*overshootsNo)-np.array(overshootTime[::-1])* \
                                     np.array([oe2['v']]*overshootsNo)
-                            if len(outEdges) > 2:
+                            if boolTrifurcation:
                                 if oe3['sign'] == 1.0:
                                     position3=np.array(overshootTime)*np.array([oe3['v']]*overshootsNo)
                                 else:
@@ -1425,7 +1485,7 @@ class LinearSystemHtdTotFixedDT(object):
                                     index=-1*(i+1) if sign == 1.0 else i
                                     index1=-1*(i+1) if oe['sign'] == 1.0 else i
                                     index2=-1*(i+1) if oe2['sign'] == 1.0 else i
-                                    if len(outEdges) > 2:
+                                    if boolTrifurcation:
                                         index3=-1*(i+1) if oe3['sign'] == 1.0 else i
                                     if last == 3:
                                         if countNo1 < overshootsNo1:
@@ -1512,10 +1572,13 @@ class LinearSystemHtdTotFixedDT(object):
                                                             else:
                                                                 positionPref3.append(position3[index3])
                                                 else:
+                                                    print('Here 1')
+                                                    print(position3[index3])
                                                     positionPref3.append(position3[index3])
+                                                    print(positionPref3)
                                                 counterPref3.append(index)
                                                 countNo3 += 1
-                                                last = 2
+                                                last = 3
                                             else:
                                                 print('BIGERROR all overshootRBCS should fit')
                                     elif last == 1:
@@ -1574,7 +1637,10 @@ class LinearSystemHtdTotFixedDT(object):
                                                             else:
                                                                 positionPref3.append(position3[index3])
                                                 else:
+                                                    print('Here 2')
+                                                    print(position3[index3])
                                                     positionPref3.append(position3[index3])
+                                                    print(positionPref3)
                                                 counterPref3.append(index)
                                                 countNo3 += 1
                                                 last = 3
@@ -1635,7 +1701,10 @@ class LinearSystemHtdTotFixedDT(object):
                                                         else:
                                                             positionPref3.append(position3[index3])
                                             else:
+                                                print('Here 3')
+                                                print(position3[index3])
                                                 positionPref3.append(position3[index3])
+                                                print(positionPref3)
                                             counterPref3.append(index)
                                             countNo3 += 1
                                             last = 3
@@ -1849,7 +1918,7 @@ class LinearSystemHtdTotFixedDT(object):
                                             positionPref3[0] = oe3['length']
                                             for i in range(len(positionPref3)-1):
                                                 if positionPref3[i]-positionPref3[i+1] < oe3['minDist'] + eps:
-                                                    positionPref2[i+1]=positionPref3[i] - oe3['minDist']
+                                                    positionPref3[i+1]=positionPref3[i] - oe3['minDist']
                                                 else:
                                                     break
                                             if positionPref3[-1] < 0:
@@ -1905,7 +1974,7 @@ class LinearSystemHtdTotFixedDT(object):
                                     index2=-1*(i+1) if oe2['sign'] == 1.0 else i
                                     #The possible number of RBCs results from the distance the first RBC overshoots
                                     #it can happen that due to that more RBCs are blocked than expected, that is checked with the following values
-                                    if len(outEdges) > 2:
+                                    if boolTrifurcation:
                                         index3=-1*(i+1) if oe3['sign'] == 1.0 else i
                                     #check if RBC still fits into Prefered OutE
                                     if posNoBifEventsPref > countPref1 and pref1Full == 0:
@@ -1927,7 +1996,7 @@ class LinearSystemHtdTotFixedDT(object):
                                                         #If the distance is not big enough check if RBC fits into outEPref3
                                                         if dist2 < oe2['minDist']:
                                                             #Check if there is a third outEdge
-                                                            if len(outEdges)>2:
+                                                            if boolTrifurcation:
                                                                 #check if RBC still fits into outEPref3
                                                                 if posNoBifEventsPref3 > countPref3 and pref3Full == 0:
                                                                     #Check if there are RBCs in the third outEdge
@@ -2043,6 +2112,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                                                 if oe3['sign'] == 1.0:
                                                                                     position3[index3]=positionPref3[-1]-oe3['minDist']
                                                                                     if position3[index3] > 0:
+                                                                                        print('Here 4')
+                                                                                        print(position3[index3])
                                                                                         positionPref3.append(position3[index3])
                                                                                         counterPref3.append(index)
                                                                                         countPref3 += 1
@@ -2055,6 +2126,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                                                 else:
                                                                                     position3[index3]=positionPref3[-1]+oe3['minDist']
                                                                                     if position3[index3] < oe3['length']:
+                                                                                        print('Here 5')
+                                                                                        print(position3[index3])
                                                                                         positionPref3.append(position3[index3])
                                                                                         counterPref3.append(index)
                                                                                         countPref3 += 1
@@ -2065,6 +2138,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                                                         print(np.floor(space3/oe3['minDist']))
                                                                         #There is enough space in outEdge 3
                                                                         else:
+                                                                            print('Here 6')
+                                                                            print(position3[index3])
                                                                             positionPref3.append(position3[index3])
                                                                             counterPref3.append(index)
                                                                             countPref3 += 1
@@ -2091,6 +2166,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                                                 #Avoid overshooting whole vessels
                                                                                 if position3[index3] < 0:
                                                                                     position3[index3]=0
+                                                                        print('Here 7')
+                                                                        print(position3[index3])
                                                                         positionPref3.append(position3[index3])
                                                                         counterPref3.append(index)
                                                                         countPref3 += 1
@@ -2282,7 +2359,7 @@ class LinearSystemHtdTotFixedDT(object):
                                                 #There is no space in the second outEdge
 					        #Check if there is a third outEdge
                                                 else:
-                                                    if len(outEdges)>2:
+                                                    if boolTrifurcation:
                                                         #check if RBC still fits into outEPref3
                                                         if posNoBifEventsPref3 > countPref3 and pref3Full == 0:
                                                             #Check if RBCs have already been put into 
@@ -2347,6 +2424,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                                         if oe3['sign'] == 1.0:
                                                                             position3[index3]=positionPref3[-1]-oe3['minDist']
                                                                             if position3[index3] > 0:
+                                                                                print('Here 8')
+                                                                                print(position3[index3])
                                                                                 positionPref3.append(position3[index3])
                                                                                 counterPref3.append(index)
                                                                                 countPref3 += 1
@@ -2359,6 +2438,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                                         else:
                                                                             position3[index3]=positionPref3[-1]+oe3['minDist']
                                                                             if position3[index3] < oe3['length']:
+                                                                                print('Here 9')
+                                                                                print(position3[index3])
                                                                                 positionPref3.append(position3[index3])
                                                                                 counterPref3.append(index)
                                                                                 countPref3 += 1
@@ -2369,6 +2450,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                                                 print(np.floor(space3/oe3['minDist']))
                                                                 #There is enough space in outEdge 3
                                                                 else:
+                                                                    print('Here 10')
+                                                                    print(position3[index3])
                                                                     positionPref3.append(position3[index3])
                                                                     counterPref3.append(index)
                                                                     countPref3 += 1
@@ -2395,6 +2478,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                                         #Avoid overshooting whole vessels
                                                                             if position3[index3] < 0:
                                                                                 position3[index3]=0
+                                                                print('Here 11')
+                                                                print(position3[index3])
                                                                 positionPref3.append(position3[index3])
                                                                 counterPref3.append(index)
                                                                 countPref3 += 1
@@ -2477,7 +2562,7 @@ class LinearSystemHtdTotFixedDT(object):
                                                 else position2[index2]-positionPref2[-1]
                                             if dist2 < oe2['minDist']:
                                                 #Check if there is a third outEdge
-                                                if len(outEdges)>2:
+                                                if boolTrifurcation:
                                                     if posNoBifEventsPref3 > countPref3 and pref3Full == 0:
                                                         #Check if there are RBCs in the third outEdge
                                                         if positionPref3 != []:
@@ -2542,6 +2627,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                                     if oe3['sign'] == 1.0:
                                                                         position3[index3]=positionPref3[-1]-oe3['minDist']
                                                                         if position3[index3] > 0:
+                                                                            print('Here 12')
+                                                                            print(position3[index3])
                                                                             positionPref3.append(position3[index3])
                                                                             counterPref3.append(index)
                                                                             countPref3 += 1
@@ -2554,6 +2641,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                                     else:
                                                                         position3[index3]=positionPref3[-1]+oe3['minDist']
                                                                         if position3[index3] < oe3['length']:
+                                                                            print('Here 13')
+                                                                            print(position3[index3])
                                                                             positionPref3.append(position3[index3])
                                                                             counterPref3.append(index)
                                                                             countPref3 += 1
@@ -2564,6 +2653,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                                             print(np.floor(space3/oe3['minDist']))
                                                             #There is enough space in outEdge 3
                                                             else:
+                                                                print('Here 14')
+                                                                print(position3[index3])
                                                                 positionPref3.append(position3[index3])
                                                                 counterPref3.append(index)
                                                                 countPref3 += 1
@@ -2584,6 +2675,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                                 else:
                                                                     if position3[index3] < 0:
                                                                         position3[index3]=0
+                                                            print('Here 15')
+                                                            print(position3[index3])
                                                             positionPref3.append(position3[index3])
                                                             counterPref3.append(index)
                                                             countPref3 += 1
@@ -2654,7 +2747,7 @@ class LinearSystemHtdTotFixedDT(object):
                                             countPref2 += 1
                                     else:
                                         #Check if there is a third outEdge
-                                        if len(outEdges)>2:
+                                        if boolTrifurcation:
                                             #Check if there are RBCs in the third outEdge
                                             if posNoBifEventsPref3 > countPref3 and pref3Full == 0:
                                                 if positionPref3 != []:
@@ -2666,6 +2759,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                         if oe3['sign'] == 1.0:
                                                             position3[index3]=positionPref3[-1]-oe3['minDist']
                                                             if position3[index3] > 0:
+                                                                print('Here 16')
+                                                                print(position3[index3])
                                                                 positionPref3.append(position3[index3])
                                                                 counterPref3.append(index)
                                                                 countPref3 += 1
@@ -2675,6 +2770,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                         else: 
                                                             position3[index3]=positionPref3[-1]+oe3['minDist']
                                                             if position3[index3] < oe3['length']:
+                                                                print('Here 17')
+                                                                print(position3[index3])
                                                                 positionPref3.append(position3[index3])
                                                                 counterPref3.append(index)
                                                                 countPref3 += 1
@@ -2683,6 +2780,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                                 break
                                                     #There is enough space in outEdge 3
                                                     else:
+                                                        print('Here 18')
+                                                        print(position3[index3])
                                                         positionPref3.append(position3[index3])
                                                         counterPref3.append(index)
                                                         countPref3 += 1
@@ -2702,6 +2801,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                         else:
                                                             if position3[index3] < 0:
                                                                 position3[index3]=0
+                                                    print('Here 19')
+                                                    print(position3[index3])
                                                     positionPref3.append(position3[index3])
                                                     counterPref3.append(index)
                                                     countPref3 += 1
@@ -2775,6 +2876,7 @@ class LinearSystemHtdTotFixedDT(object):
     #-------------------------------------------------------------------------------------------
                 #if vertex is convergent vertex
                     elif G.vs[vi]['vType'] == 4:
+                        boolTrifurcation = 0
                         bifRBCsIndex1=bifRBCsIndex
                         noBifEvents1=noBifEvents
                         outE=G.vs[vi]['outflowE'][0]
@@ -2792,8 +2894,8 @@ class LinearSystemHtdTotFixedDT(object):
                                     inE3=i
                         e2=G.es[inE2]
                         #Move RBCs in second inEdge (if that has not been done already)
-                        if inE2 not in convEdges2:
-                            convEdges2.append(inE2)
+                        if convEdges2[inE2] == 0:
+                            convEdges2[inE2]=1
                             #If RBCs are present move all RBCs in inEdge2
                             if len(e2['rRBC']) > 0:
                                 e2['rRBC'] = e2['rRBC'] + e2['v'] * dt * e2['sign']
@@ -2826,8 +2928,9 @@ class LinearSystemHtdTotFixedDT(object):
                         #Check if there is a third inEdge
                         if len(inflowEdges) > 2:
                             e3=G.es[inE3]
-                            if inE3 not in convEdges2:
-                                convEdges2.append(inE3)
+                            boolTrifurcation = 1
+                            if convEdges2[inE2] == 0:
+                                convEdges2[inE3]=1
                                 #If RBCs are present move all RBCs in inEdge3
                                 if len(e3['rRBC']) > 0:
                                     e3['rRBC'] = e3['rRBC'] + e3['v'] * dt * e3['sign']
@@ -2860,14 +2963,15 @@ class LinearSystemHtdTotFixedDT(object):
                         else:
                             bifRBCsIndex3=[]
                             noBifEvents3=0
+                            boolTrifurcation = 0
                         #Calculate distance to first RBC in outEdge
-                        if len(G.es[outE]['rRBC']) > 0:
-                            distToFirst=G.es[outE]['rRBC'][0] if G.es[outE]['sign'] == 1.0 else G.es[outE]['length']-G.es[outE]['rRBC'][-1]
+                        if len(oe['rRBC']) > 0:
+                            distToFirst=oe['rRBC'][0] if oe['sign'] == 1.0 else oe['length']-oe['rRBC'][-1]
                         else:
-                            distToFirst=G.es[outE]['length']
-                        posNoBifEvents=int(np.floor(distToFirst/G.es[outE]['minDist']))
-                        if posNoBifEvents + len(G.es[outE]['rRBC']) > G.es[outE]['nMax']:
-                            posNoBifEvents = G.es[outE]['nMax'] - len(G.es[outE]['rRBC'])
+                            distToFirst=oe['length']
+                        posNoBifEvents=int(np.floor(distToFirst/oe['minDist']))
+                        if posNoBifEvents + len(oe['rRBC']) > oe['nMax']:
+                            posNoBifEvents = oe['nMax'] - len(oe['rRBC'])
                         #If bifurcations are possible check how many overshoots there are at the inEdges
                         if posNoBifEvents > 0:
                             #overshootDist starts with the RBC which overshoots the least
@@ -2889,7 +2993,7 @@ class LinearSystemHtdTotFixedDT(object):
                                 overshootDist2=[]
                                 overshootTime2=[]
                                 dummy2=[]
-                            if len(inflowEdges) > 2:
+                            if boolTrifurcation:
                                 if noBifEvents3 > 0:
                                     overshootDist3=[e3['rRBC'][bifRBCsIndex3]-[e3['length']]*noBifEvents3 if sign3 == 1.0
                                         else [0]*noBifEvents3-e3['rRBC'][bifRBCsIndex3]][0]
@@ -2926,28 +3030,30 @@ class LinearSystemHtdTotFixedDT(object):
                             count2=inEdge.count(2)
                             count3=inEdge.count(3)
                             #position starts with least overshooting RBC and ends with highest overshooting RBC
-                            position=np.array(overshootTime)*np.array([G.es[outE]['v']]*overshootsNo)
+                            position=np.array(overshootTime)*np.array([oe['v']]*overshootsNo)
                             #Check if RBCs are to close to each other
                             #Check if the RBCs runs into an old one in the vessel
                             #(only position of the leading RBC is changed)
-                            if len(G.es[outE]['rRBC']) > 0:
-                                if G.es[outE]['sign'] == 1.0:
-                                    if position[-1] > G.es[outE]['rRBC'][0]-G.es[outE]['minDist']:
-                                        position[-1]=G.es[outE]['rRBC'][0]-G.es[outE]['minDist']
+                            if len(oe['rRBC']) > 0:
+                                if oe['sign'] == 1.0:
+                                    if position[-1] > oe['rRBC'][0]-oe['minDist']:
+                                        position[-1]=oe['rRBC'][0]-oe['minDist']
                                 else:
-                                    if G.es[outE]['length']-position[-1] < G.es[outE]['rRBC'][-1]+G.es[outE]['minDist']:
-                                        position[-1]=G.es[outE]['length']-(G.es[outE]['rRBC'][-1]+G.es[outE]['minDist'])
+                                    if oe['length']-position[-1] < oe['rRBC'][-1]+oe['minDist']:
+                                        position[-1]=oe['length']-(oe['rRBC'][-1]+oe['minDist'])
                             else:
                                 #Check if the RBCs overshooted the vessel
-                                if position[-1] > G.es[outE]['length']:
-                                    position[-1]=G.es[outE]['length']
+                                if position[-1] > oe['length']:
+                                    position[-1]=oe['length']
                             #Position of the following RBCs is changed, such that they do not overlap
-                            for i in range(-1,-1*(count1+count2+count3),-1):
-                                if position[i]-position[i-1] < G.es[outE]['minDist'] or \
+                            allCounts=count1+count2+count3
+                            for i in range(-1,-1*allCounts,-1):
+                                if position[i]-position[i-1] < oe['minDist'] or \
                                     position[i-1] > position[i]:
-                                    position[i-1]=position[i]-G.es[outE]['minDist']
+                                    position[i-1]=position[i]-oe['minDist']
                             #if first RBC did not yet move enough less than the possible no of RBCs fit into the outEdge
-                            for i in range(count1+count2+count3):
+                            allCounts=count1+count2+count3
+                            for i in range(allCounts):
                                 if position[i] < 0:
                                     if inEdge[i] == 1:
                                         count1 += -1
@@ -2978,7 +3084,7 @@ class LinearSystemHtdTotFixedDT(object):
                                     e2['rRBC']=e2['rRBC'][:-count2]
                                 else:
                                     e2['rRBC']=e2['rRBC'][count2::]
-                            if len(inflowEdges) > 2:
+                            if boolTrifurcation:
                                 if noBifEvents3 > 0 and count3 > 0:
                                     #Remove RBCs from old Edge 3
                                     if sign3 == 1.0:
@@ -3056,7 +3162,7 @@ class LinearSystemHtdTotFixedDT(object):
                                         break
                         #Deal with RBCs which could not be reassigned to the new edge because of a traffic jam
                         #InEdge 3
-                        if len(inflowEdges) > 2:
+                        if boolTrifurcation:
                             noStuckRBCs3=len(bifRBCsIndex3)-count3
                             for i in range(noStuckRBCs3):
                                 index=-1*(i+1) if sign3 == 1.0 else i
@@ -3092,7 +3198,6 @@ class LinearSystemHtdTotFixedDT(object):
                     elif G.vs[vi]['vType'] == 6:
                         bifRBCsIndex1=bifRBCsIndex
                         noBifEvents1=noBifEvents
-                        outE=G.vs[vi]['outflowE'][0]
                         inflowEdges=G.vs[vi]['inflowE']
                         for i in inflowEdges:
                             if i == e.index:
@@ -3100,8 +3205,8 @@ class LinearSystemHtdTotFixedDT(object):
                             else:
                                 inE2=i
                         e2=G.es[inE2]
-                        if inE2 not in convEdges2:
-                            convEdges2.append(inE2)
+                        if convEdges2[inE2] == 0:
+                            convEdges2[inE2]=1
                             #If RBCs are present move all RBCs in inEdge2
                             if len(e2['rRBC']) > 0:
                                 e2['rRBC'] = e2['rRBC'] + e2['v'] * dt * e2['sign']
@@ -3132,8 +3237,6 @@ class LinearSystemHtdTotFixedDT(object):
                         sign2=e2['sign']
                         #Define outEdges
                         outEdges=G.vs[vi]['outflowE']
-                        outE=outEdges[0]
-                        outE2=outEdges[1]
                         #Differ between capillaries and non-capillaries
                         if G.vs[vi]['isCap']:
                             nonCap = 0
@@ -3171,10 +3274,30 @@ class LinearSystemHtdTotFixedDT(object):
                         if nonCap:
                             overshootsNo1 = np.floor(ratio1 * noBifEvents)
                             overshootsNo2 = noBifEvents - overshootsNo1
+                            stuck1=0
+                            stuck2=0
                             if overshootsNo1 > posNoBifEventsPref:
+                                stuck1 = overshootsNo1 -posNoBifEventsPref
                                 overshootsNo1 = posNoBifEventsPref
                             if overshootsNo2 > posNoBifEventsPref2:
+                                stuck2 = overshootsNo2 -posNoBifEventsPref2
                                 overshootsNo2 = posNoBifEventsPref2
+                            if stuck1 != 0:
+                                if overshootsNo2 < posNoBifEventsPref2:
+                                    if overshootsNo2 + stuck1 <= posNoBifEventsPref2:
+                                        overshootsNo2 += stuck1
+                                        stuck1 = 0
+                                    else:
+                                        stuck1 += -(posNoBifEventsPref2-overshootsNo2)
+                                        overshootsNo2 = posNoBifEventsPref2
+                            if stuck2 != 0:
+                                if overshootsNo1 < posNoBifEventsPref:
+                                    if overshootsNo1 + stuck2 <= posNoBifEventsPref:
+                                        overshootsNo1 += stuck2
+                                        stuck2 = 0
+                                    else:
+                                        stuck2 += -(posNoBifEventsPref-overshootsNo1)
+                                        overshootsNo1 = posNoBifEventsPref
                             overshootsNo = int(overshootsNo1 + overshootsNo2)
                             posNoBifEvents = overshootsNo
                         #Calculate number of bifEvents
@@ -3918,6 +4041,8 @@ class LinearSystemHtdTotFixedDT(object):
                     cum_length = e['posFirst_last'] + e['v_last'] * dt
                     posFirst = cum_length
                     e['posFirst_last']=posFirst
+                    if e['v'] > e['v_last']:
+                        e['v_last']=e['v']
                     #e['v_last']=e['v']
                 while cum_length >= lrbc and nMaxNew > 0:
                     if len(e['keep_rbcs']) != 0:
@@ -3932,13 +4057,12 @@ class LinearSystemHtdTotFixedDT(object):
                             cum_length = posFirst
                             e['keep_rbcs']=[]
                             e['posFirst_last']=posFirst
-                            e['v_last']=e['v']
+                            #e['v_last']=e['v']
                         else:
                             break
                     else:
                         #number of RBCs randomly chosen to average htt
                         number=np.exp(e['logNormal'][0]+e['logNormal'][1]*np.random.randn(1)[0])
-                        #self._spacing.append(number)
                         spacing = lrbc+lrbc*number
                         if posFirst - spacing >= 0:
                             if posFirst - spacing > e['length']:
@@ -3950,15 +4074,19 @@ class LinearSystemHtdTotFixedDT(object):
                             nMaxNew += -1
                             cum_length = posFirst
                             e['posFirst_last']=posFirst
-                            e['v_last']=e['v']
+                            #e['v_last']=e['v']
                         else:
                             e['keep_rbcs']=[spacing]
-                            e['v_last']=e['v']
+                            #e['v_last']=e['v']
                             if len(rRBC) == 0:
                                 e['posFirst_last']=posFirst
                             else:
                                 e['posFirst_last']=rRBC[-1]
                             break
+                if len(e['keep_rbcs']) == 0:
+                    number=np.exp(e['logNormal'][0]+e['logNormal'][1]*np.random.randn(1)[0])
+                    spacing = lrbc+lrbc*number
+                    e['keep_rbcs']=[spacing]
                 rRBC = np.array(rRBC)
                 if len(rRBC) >= 1.:
                     if e['sign'] == 1:
@@ -3990,6 +4118,8 @@ class LinearSystemHtdTotFixedDT(object):
                         else:
                             cum_length = e2['posFirst_last'] + e2['v_last'] * dt
                             posFirst = cum_length
+                            if e2['v'] > e2['v_last']:
+                                e2['v_last']=e2['v']
                             e2['posFirst_last']=posFirst
                         while cum_length >= lrbc and nMaxNew > 0:
                             if len(e2['keep_rbcs']) != 0:
@@ -4004,11 +4134,11 @@ class LinearSystemHtdTotFixedDT(object):
                                     cum_length = posFirst
                                     e2['keep_rbcs']=[]
                                     e2['posFirst_last']=posFirst
-                                    e2['v_last']=e2['v']
+                                    #e2['v_last']=e2['v']
                                 else:
                                     if len(e2['rRBC']) > 0:
                                         e2['posFirst_last'] = posFirst
-                                        e2['v_last']=e2['v']
+                                        #e2['v_last']=e2['v']
                                     break
                             else:
                                 #number of RBCs randomly chosen to average htt
@@ -4024,15 +4154,19 @@ class LinearSystemHtdTotFixedDT(object):
                                     nMaxNew += -1
                                     cum_length = posFirst
                                     e2['posFirst_last']=posFirst
-                                    e2['v_last']=e2['v']
+                                    #e2['v_last']=e2['v']
                                 else:
                                     e2['keep_rbcs']=[spacing]
-                                    e2['v_last']=e2['v']
+                                    #e2['v_last']=e2['v']
                                     if len(rRBC2) == 0:
                                         e2['posFirst_last']=posFirst
                                     else:
                                         e2['posFirst_last']=rRBC2[-1]
                                     break
+                        if len(e2['keep_rbcs']) == 0:
+                            number=np.exp(e2['logNormal'][0]+e2['logNormal'][1]*np.random.randn(1)[0])
+                            spacing = lrbc+lrbc*number
+                            e2['keep_rbcs']=[spacing]
                         rRBC2 = np.array(rRBC2)
                         if len(rRBC2) >= 1.:
                             if e2['sign'] == 1:
@@ -4045,7 +4179,7 @@ class LinearSystemHtdTotFixedDT(object):
                                 vertexUpdate.append(e2.target)
                                 vertexUpdate.append(e2.source)
                                 edgeUpdate.append(e2.index)
-                    if G.vs[vi]['vType']==4 and len(inflowEdges) > 2:
+                    if G.vs[vi]['vType']==4 and boolTrifurcation:
                         #Check if httBC exists
                         boolHttEdge3 = 0
                         if e3['httBC'] is not None:
@@ -4063,6 +4197,8 @@ class LinearSystemHtdTotFixedDT(object):
                             else:
                                 cum_length = e3['posFirst_last'] + e3['v_last'] * dt
                                 posFirst = cum_length
+                                if e3['v'] > e3['v_last']:
+                                    e3['v_last']=e3['v']
                                 e3['posFirst_last']=posFirst
                             while cum_length >= lrbc and nMaxNew > 0:
                                 if len(e3['keep_rbcs']) != 0:
@@ -4077,11 +4213,11 @@ class LinearSystemHtdTotFixedDT(object):
                                         cum_length = posFirst
                                         e3['keep_rbcs']=[]
                                         e3['posFirst_last']=posFirst
-                                        e3['v_last']=e3['v']
+                                        #e3['v_last']=e3['v']
                                     else:
                                         if len(e3['rRBC']) > 0:
                                             e3['posFirst_last'] = posFirst
-                                            e3['v_last']=e3['v']
+                                            #e3['v_last']=e3['v']
                                         break
                                 else:
                                     #number of RBCs randomly chosen to average htt
@@ -4097,15 +4233,19 @@ class LinearSystemHtdTotFixedDT(object):
                                         nMaxNew += -1
                                         cum_length = posFirst
                                         e3['posFirst_last']=posFirst
-                                        e3['v_last']=e3['v']
+                                        #e3['v_last']=e3['v']
                                     else:
                                         e3['keep_rbcs']=[spacing]
-                                        e3['v_last']=e3['v']
+                                        #e3['v_last']=e3['v']
                                         if len(rRBC3) == 0:
                                             e3['posFirst_last']=posFirst
                                         else:
                                             e3['posFirst_last']=rRBC3[-1]
                                         break
+                            if len(e3['keep_rbcs']) == 0:
+                                number=np.exp(e3['logNormal'][0]+e3['logNormal'][1]*np.random.randn(1)[0])
+                                spacing = lrbc+lrbc*number
+                                e3['keep_rbcs']=[spacing]
                             rRBC3 = np.array(rRBC3)
                             if len(rRBC3) >= 1.:
                                 if e3['sign'] == 1:
@@ -4200,6 +4340,17 @@ class LinearSystemHtdTotFixedDT(object):
                     for j in range(len(edge['rRBC'])-1):
                         if edge['rRBC'][j] > edge['rRBC'][j+1] or edge['rRBC'][j+1]-edge['rRBC'][j] < edge['minDist']-100*eps:
                             print('BIGERROR BEGINNING END 3')
+                            print('edgesInvolved')
+                            print(edgesInvolved)
+                            print('Find ERROR')
+                            print(noBifEvents)
+                            print(boolHttEdge)
+                            print(boolHttEdge2)
+                            print(boolHttEdge3)
+                            print(noBifEvents)
+                            print('vertex')
+                            print(vi)
+                            print('Edges')
                             print(i)
                             print(edge['rRBC'][j])
                             print(edge['rRBC'][j+1])
@@ -4207,6 +4358,21 @@ class LinearSystemHtdTotFixedDT(object):
                             print(edge['minDist'])
                             print(edge['sign'])
                             print(G.vs[vi]['vType'])
+                            print('Check divergent')
+                            print(len(positionPref1))
+                            print(len(positionPref2))
+                            print(len(positionPref3))
+                            print('Check positionPref')
+                            print(positionPref1)
+                            print(positionPref2)
+                            print(positionPref3)
+                            print('Edges')
+                            print(oe.index)
+                            print(oe2.index)
+                            print(oe3.index)
+                            print(e.index)
+                            print('noStuckRBCs')
+                            print(noStuckRBCs)
             if overshootsNo != 0:
                 if self._capDil != 0:
                     if vi in upstreamDivBifs:
@@ -4512,7 +4678,6 @@ class LinearSystemHtdTotFixedDT(object):
                             G['rbcsMovedPerEdge']=self._rbcsMovedPerEdge
                             G['edgesMovedRBCs']=self._edgesWithMovedRBCs
                             G['rbcMovedAll']=self._rbcMoveAll
-                        #G['spacing']=self._spacing
                         filename1='sampledict_BackUp_'+str(BackUpCounter)+'.pkl'
                         filename2='G_BackUp'+str(BackUpCounter)+'.pkl'
                         if self._capDil != 0:
@@ -4589,7 +4754,6 @@ class LinearSystemHtdTotFixedDT(object):
         #G['iterFinalPlot']=tPlot
         G['iterFinalSample']=tSample
         G['BackUpCounter']=BackUpCounter
-        #G['spacing']=self._spacing
         filename1='sampledict_BackUp_'+str(BackUpCounter)+'.pkl'
         filename2='G_BackUp'+str(BackUpCounter)+'.pkl'
         if self._capDil != 0:
@@ -4620,7 +4784,6 @@ class LinearSystemHtdTotFixedDT(object):
 	    #g_output.write_pkl(self._transitTimeDict, 'TransitTimeDict.pkl')
             #g_output.write_pvd_time_series('sequenceSampling.pvd',
 	    #				   filenamelistAvg, timelistAvg)
-        #G['spacing']=self._spacing
         vgm.write_pkl(G, 'G_final.pkl')
         vgm.write_pkl(G,filename2)
         # Since Physiology has been rewritten using Cython, it cannot be
