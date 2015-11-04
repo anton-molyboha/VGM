@@ -1117,10 +1117,10 @@ class LinearSystemHtdTotFixedDT(object):
             else:
                 vi=e.source
             edgesInvolved=G.adjacent(vi)
-            print('Current vertex')
-            print(G.vs[vi]['inflowE'])
-	    print(G.vs[vi]['outflowE'])
-            print(edgesInvolved)
+            #print('Current vertex')
+            #print(G.vs[vi]['inflowE'])
+	    #print(G.vs[vi]['outflowE'])
+            #print(edgesInvolved)
             nRBCSumBefore = np.sum(G.es[edgesInvolved]['nRBC'])
             overshootsNo=0 #Reset - Number of overshoots acutally taking place (considers possible number of bifurcation events)
             #If there is a BC for the edge new RBCs have to be introduced
@@ -1310,7 +1310,7 @@ class LinearSystemHtdTotFixedDT(object):
                         if len(outEdges) > 2:
                             boolTrifurcation = 1
                         #Check if there are two or three outEdgs
-                        print('its a divergent bifurcation')
+                        #print('its a divergent bifurcation')
                         #Differ between capillaries and non-capillaries
                         if G.vs[vi]['isCap']:
                             nonCap = 0
@@ -1572,10 +1572,10 @@ class LinearSystemHtdTotFixedDT(object):
                                                             else:
                                                                 positionPref3.append(position3[index3])
                                                 else:
-                                                    print('Here 1')
-                                                    print(position3[index3])
+                                                    #print('Here 1')
+                                                    #print(position3[index3])
                                                     positionPref3.append(position3[index3])
-                                                    print(positionPref3)
+                                                    #print(positionPref3)
                                                 counterPref3.append(index)
                                                 countNo3 += 1
                                                 last = 3
@@ -1637,10 +1637,10 @@ class LinearSystemHtdTotFixedDT(object):
                                                             else:
                                                                 positionPref3.append(position3[index3])
                                                 else:
-                                                    print('Here 2')
-                                                    print(position3[index3])
+                                                    #print('Here 2')
+                                                    #print(position3[index3])
                                                     positionPref3.append(position3[index3])
-                                                    print(positionPref3)
+                                                    #print(positionPref3)
                                                 counterPref3.append(index)
                                                 countNo3 += 1
                                                 last = 3
@@ -1701,10 +1701,10 @@ class LinearSystemHtdTotFixedDT(object):
                                                         else:
                                                             positionPref3.append(position3[index3])
                                             else:
-                                                print('Here 3')
-                                                print(position3[index3])
+                                                #print('Here 3')
+                                                #print(position3[index3])
                                                 positionPref3.append(position3[index3])
-                                                print(positionPref3)
+                                                #print(positionPref3)
                                             counterPref3.append(index)
                                             countNo3 += 1
                                             last = 3
@@ -2112,8 +2112,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                                                 if oe3['sign'] == 1.0:
                                                                                     position3[index3]=positionPref3[-1]-oe3['minDist']
                                                                                     if position3[index3] > 0:
-                                                                                        print('Here 4')
-                                                                                        print(position3[index3])
+                                                                                        #print('Here 4')
+                                                                                        #print(position3[index3])
                                                                                         positionPref3.append(position3[index3])
                                                                                         counterPref3.append(index)
                                                                                         countPref3 += 1
@@ -2126,8 +2126,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                                                 else:
                                                                                     position3[index3]=positionPref3[-1]+oe3['minDist']
                                                                                     if position3[index3] < oe3['length']:
-                                                                                        print('Here 5')
-                                                                                        print(position3[index3])
+                                                                                        #print('Here 5')
+                                                                                        #print(position3[index3])
                                                                                         positionPref3.append(position3[index3])
                                                                                         counterPref3.append(index)
                                                                                         countPref3 += 1
@@ -2138,8 +2138,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                                                         print(np.floor(space3/oe3['minDist']))
                                                                         #There is enough space in outEdge 3
                                                                         else:
-                                                                            print('Here 6')
-                                                                            print(position3[index3])
+                                                                            #print('Here 6')
+                                                                            #print(position3[index3])
                                                                             positionPref3.append(position3[index3])
                                                                             counterPref3.append(index)
                                                                             countPref3 += 1
@@ -2166,8 +2166,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                                                 #Avoid overshooting whole vessels
                                                                                 if position3[index3] < 0:
                                                                                     position3[index3]=0
-                                                                        print('Here 7')
-                                                                        print(position3[index3])
+                                                                        #print('Here 7')
+                                                                        #print(position3[index3])
                                                                         positionPref3.append(position3[index3])
                                                                         counterPref3.append(index)
                                                                         countPref3 += 1
@@ -2424,8 +2424,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                                         if oe3['sign'] == 1.0:
                                                                             position3[index3]=positionPref3[-1]-oe3['minDist']
                                                                             if position3[index3] > 0:
-                                                                                print('Here 8')
-                                                                                print(position3[index3])
+                                                                                #print('Here 8')
+                                                                                #print(position3[index3])
                                                                                 positionPref3.append(position3[index3])
                                                                                 counterPref3.append(index)
                                                                                 countPref3 += 1
@@ -2438,8 +2438,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                                         else:
                                                                             position3[index3]=positionPref3[-1]+oe3['minDist']
                                                                             if position3[index3] < oe3['length']:
-                                                                                print('Here 9')
-                                                                                print(position3[index3])
+                                                                                #print('Here 9')
+                                                                                #print(position3[index3])
                                                                                 positionPref3.append(position3[index3])
                                                                                 counterPref3.append(index)
                                                                                 countPref3 += 1
@@ -2450,8 +2450,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                                                 print(np.floor(space3/oe3['minDist']))
                                                                 #There is enough space in outEdge 3
                                                                 else:
-                                                                    print('Here 10')
-                                                                    print(position3[index3])
+                                                                    #print('Here 10')
+                                                                    #print(position3[index3])
                                                                     positionPref3.append(position3[index3])
                                                                     counterPref3.append(index)
                                                                     countPref3 += 1
@@ -2478,8 +2478,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                                         #Avoid overshooting whole vessels
                                                                             if position3[index3] < 0:
                                                                                 position3[index3]=0
-                                                                print('Here 11')
-                                                                print(position3[index3])
+                                                                #print('Here 11')
+                                                                #print(position3[index3])
                                                                 positionPref3.append(position3[index3])
                                                                 counterPref3.append(index)
                                                                 countPref3 += 1
@@ -2627,8 +2627,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                                     if oe3['sign'] == 1.0:
                                                                         position3[index3]=positionPref3[-1]-oe3['minDist']
                                                                         if position3[index3] > 0:
-                                                                            print('Here 12')
-                                                                            print(position3[index3])
+                                                                            #print('Here 12')
+                                                                            #print(position3[index3])
                                                                             positionPref3.append(position3[index3])
                                                                             counterPref3.append(index)
                                                                             countPref3 += 1
@@ -2641,8 +2641,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                                     else:
                                                                         position3[index3]=positionPref3[-1]+oe3['minDist']
                                                                         if position3[index3] < oe3['length']:
-                                                                            print('Here 13')
-                                                                            print(position3[index3])
+                                                                            #print('Here 13')
+                                                                            #print(position3[index3])
                                                                             positionPref3.append(position3[index3])
                                                                             counterPref3.append(index)
                                                                             countPref3 += 1
@@ -2653,8 +2653,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                                             print(np.floor(space3/oe3['minDist']))
                                                             #There is enough space in outEdge 3
                                                             else:
-                                                                print('Here 14')
-                                                                print(position3[index3])
+                                                                #print('Here 14')
+                                                                #print(position3[index3])
                                                                 positionPref3.append(position3[index3])
                                                                 counterPref3.append(index)
                                                                 countPref3 += 1
@@ -2675,8 +2675,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                                 else:
                                                                     if position3[index3] < 0:
                                                                         position3[index3]=0
-                                                            print('Here 15')
-                                                            print(position3[index3])
+                                                            #print('Here 15')
+                                                            #print(position3[index3])
                                                             positionPref3.append(position3[index3])
                                                             counterPref3.append(index)
                                                             countPref3 += 1
@@ -2759,8 +2759,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                         if oe3['sign'] == 1.0:
                                                             position3[index3]=positionPref3[-1]-oe3['minDist']
                                                             if position3[index3] > 0:
-                                                                print('Here 16')
-                                                                print(position3[index3])
+                                                                #print('Here 16')
+                                                                #print(position3[index3])
                                                                 positionPref3.append(position3[index3])
                                                                 counterPref3.append(index)
                                                                 countPref3 += 1
@@ -2770,8 +2770,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                         else: 
                                                             position3[index3]=positionPref3[-1]+oe3['minDist']
                                                             if position3[index3] < oe3['length']:
-                                                                print('Here 17')
-                                                                print(position3[index3])
+                                                                #print('Here 17')
+                                                                #print(position3[index3])
                                                                 positionPref3.append(position3[index3])
                                                                 counterPref3.append(index)
                                                                 countPref3 += 1
@@ -2780,8 +2780,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                                 break
                                                     #There is enough space in outEdge 3
                                                     else:
-                                                        print('Here 18')
-                                                        print(position3[index3])
+                                                        #print('Here 18')
+                                                        #print(position3[index3])
                                                         positionPref3.append(position3[index3])
                                                         counterPref3.append(index)
                                                         countPref3 += 1
@@ -2801,8 +2801,8 @@ class LinearSystemHtdTotFixedDT(object):
                                                         else:
                                                             if position3[index3] < 0:
                                                                 position3[index3]=0
-                                                    print('Here 19')
-                                                    print(position3[index3])
+                                                    #print('Here 19')
+                                                    #print(position3[index3])
                                                     positionPref3.append(position3[index3])
                                                     counterPref3.append(index)
                                                     countPref3 += 1
