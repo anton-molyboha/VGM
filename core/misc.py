@@ -1,5 +1,5 @@
 from __future__ import division                   
-
+import vgm
 import igraph as ig
 import numpy as np
 from pylab import flatten
@@ -333,3 +333,22 @@ def intersection_plane_line(pP,nP,pL,vL):
         coordsPoint = []
 
     return coordsPoint
+#------------------------------------------------------------------------------
+def make_graph_gased_on_points(pL,G):
+    """creates a graph with the points given (for visualization in paraview)
+    INPUT: pL: point list
+           G: main Graph
+    OUTPUT: new graph of points
+    """
+
+    Gnew=vgm.VascularGraph(len(pL))
+    r=[]
+    indexOrig=[]
+    for i in pL:
+        r.append(G.vs[i]['r'])
+        indexOrig.append(G.vs[i]['indexOrig'])
+
+    Gnew.vs['r']=r
+    Gnew.vs['indexOrig']=indexOrig
+
+    return Gnew
