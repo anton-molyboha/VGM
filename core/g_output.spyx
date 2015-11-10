@@ -257,7 +257,7 @@ def write_vtp(graph, filename, tortuous=True, verbose=False):
 
     # Vertex data
     keys = G.vs.attribute_names()
-    keysToRemove = ['r','pBC','rBC','kind','sBC','inflowE','outflowE']
+    keysToRemove = ['r','pBC','rBC','kind','sBC','inflowE','outflowE','adjacent','mLocation','lDir','diameter']
     for key in keysToRemove:
         if key in keys:
             keys.remove(key)
