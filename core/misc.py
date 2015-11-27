@@ -9,8 +9,8 @@ from scipy import (array, arccos, argmin, concatenate, dot, ones, mean, pi,
 from scipy.linalg import norm
 from scipy.spatial import kdtree
 #THOSE lines produce error sometimes switch them off
-#from sympy.solvers import solve
-#from sympy import Symbol
+from sympy.solvers import solve
+from sympy import Symbol
 
 from linearSystem import LinearSystem
 from physiology import Physiology 
@@ -345,8 +345,8 @@ def make_graph_gased_on_points(pL,G):
     r=[]
     indexOrig=[]
     for i in pL:
-        r.append(G.vs[i]['r'])
-        indexOrig.append(G.vs[i]['indexOrig'])
+        r.append(G.vs[int(i)]['r'])
+        indexOrig.append(G.vs[int(i)]['indexOrig'])
 
     Gnew.vs['r']=r
     Gnew.vs['indexOrig']=indexOrig

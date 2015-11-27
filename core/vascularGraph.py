@@ -9,6 +9,7 @@ from scipy.spatial import kdtree
 import time as ttime
 from scipy import finfo
 import scipy as sp
+from sys import stdout
 
 import g_math
 import units
@@ -1123,8 +1124,8 @@ class VascularGraph(Graph):
                 e['diameters'] = np.array([d] * 3)
                 e['diameters2'] = np.array([d] * 2)
                 l = e['length']
-                e['lengths'] = np.array([l] * 3)
-                e['lengths2'] = np.array([l] * 2)
+                e['lengths'] = np.array([l/3.] * 3)
+                e['lengths2'] = np.array([l/2.] * 2)
             else:
                 n = max(int(round(dist / spacing)), 1)
                 v = (rt - rs) / n
@@ -1146,8 +1147,6 @@ class VascularGraph(Graph):
                     else:
                         lengths.append(0.5*e['lengths2'][j]+0.5*e['lengths2'][j-1])
                 e['lengths']=lengths
-
-
 
     def add_lengths2(self, edgeList=None):
         """Adds lengths2 and diameters2 as edge attriute. Lengths2 and diameters2
@@ -1193,18 +1192,23 @@ class VascularGraph(Graph):
 
 
 
-    def radius_and_center(self):
+    def radius_and_center(self,shape='cylinder'):
         """Computes the approximate radius and center of the circular cross-
         section of a cylindrical graph (the rotational axis is assumed to lie 
-        in z-direction).
-        INPUT: None (except self).
+        in z-direction). If the shape is cubic the center is computer and the 
+        radius is the radius in which all of the nodes can be found
+        INPUT: shape 'cylinder' or 'cube'.
         OUTPUT: radius: The approximate radius of the circular cross-section.
                 center: The approximate center of the circular cross-section.
         """
     
-        radius = max(((sp.amax(self.vs['r'],0) - 
-                       sp.amin(self.vs['r'],0)) / 2.0)[:-1])
-        center = sp.amin(self.vs['r'],0)[:-1] + radius
+        if shape == 'cylinder':
+            radius = max(((sp.amax(self.vs['r'],0) - 
+                           sp.amin(self.vs['r'],0)) / 2.0)[:-1])
+            center = sp.amin(self.vs['r'],0)[:-1] + radius
+        elif shape == 'cube':
+            center = np.mean(self.vs['r'],axis=0)[0:2]
+            radius = np.max([np.max(np.max(self.vs['r'],axis=0)[0:2]-center),np.max(center - np.min(self.vs['r'],axis=0)[0:2])])
     
         return radius, center
 
@@ -2352,7 +2356,7 @@ class VascularGraph(Graph):
         for i in capStarts:
             for j,k in zip(self.adjacent(i),self.neighbors(i)):
                 if self.vs[k]['nkind'] == nKind or self.vs[k]['nkind'] == nKind2: 
-                    self.es[j]['orderBasic'] = 0
+                    self.es[int(j)]['orderBasic'] = 0
                     self.vs[int(i)]['orderBasic'] = 0
                     capStartsNew.append(k)
         
@@ -2439,9 +2443,13 @@ class VascularGraph(Graph):
         for i in self.vs(nkind_eq=2).indices:
             for j,k in zip(self.neighbors(i),self.adjacent(i)):
                 if self.vs[j]['nkind'] == 4:
-                    capStarts.append(i)
+                    capStarts.append(j)
+
+        for j in capStarts:
+            self.vs[j]['orderBasicCap'] = 0
+            for j,k in zip(self.neighbors(i),self.adjacent(i)):
+                if self.vs[j]['nkind'] == 4:
                     self.es[k]['orderBasicCap'] = 0
-                    self.vs[i]['orderBasicCap'] = 0
         
         #TODO abbruch kriterium fuer assigning orders
         Gdir.to_directed_flow_based()
@@ -2451,11 +2459,11 @@ class VascularGraph(Graph):
             boolInEdgesPresent=1
             while len(changedOrder) != 0:
                 changedOrder=[]
-                verts=self.vs(orderBasicCap_eq=n,nkind_eq=4).indices+self.vs(orderBasicCap_eq=n,nkind_eq=2).indices
+                verts=self.vs(orderBasicCap_eq=n).indices
                 verts2=[]
                 for i in verts:
                     for k in Gdir.neighbors(i,dir):
-                        if self.vs[k]['nkind'] == 4 or self.vs[k]['nkind'] == 3 or self.vs[k]['nkind'] == 1:
+                        if self.vs[k]['nkind'] == 4:
                             verts2.append(k)
                 verts2=np.unique(verts2) 
                 for i in verts2:
@@ -2473,10 +2481,9 @@ class VascularGraph(Graph):
                                     changedOrder.append(i)
                                 self.es[j]['orderBasicCap']=n+1
                                 self.vs[i]['orderBasicCap']=n+1
-                            elif self.vs[k]['nkind'] == 3 or self.vs[k]['nkind'] == 1:
+                            else:
                                 if self.vs[i]['orderBasicCap'] != n+1:
                                     changedOrder.append(i)
-                                self.es[j]['orderBasicCap']=n+1
                                 self.vs[i]['orderBasicCap']=n+1
                     elif orderBasicsCap.count(n+1) >= 1 and orderBasicsCap.count(n) >= 1:
                         for j,k in zip(Gdir.adjacent(i,'out'),Gdir.neighbors(i,'out')):
@@ -2485,10 +2492,9 @@ class VascularGraph(Graph):
                                     changedOrder.append(i)
                                 self.es[j]['orderBasicCap']=n+1
                                 self.vs[i]['orderBasicCap']=n+1
-                            elif self.vs[k]['nkind'] == 3 or self.vs[k]['nkind'] == 1:
+                            else:
                                 if self.vs[i]['orderBasicCap'] != n+1:
                                     changedOrder.append(i)
-                                self.es[j]['orderBasicCap']=n+1
                                 self.vs[i]['orderBasicCap']=n+1
                     else:
                         for j,k in zip(Gdir.adjacent(i,'out'),Gdir.neighbors(i,'out')):
@@ -2497,10 +2503,9 @@ class VascularGraph(Graph):
                                     changedOrder.append(j)
                                 self.es[j]['orderBasicCap']=n
                                 self.vs[i]['orderBasicCap']=n
-                            elif self.vs[k]['nkind'] == 3 or self.vs[k]['nkind'] == 1:
+                            else:
                                 if self.vs[i]['orderBasicCap'] != n:
                                     changedOrder.append(i)
-                                self.es[j]['orderBasicCap']=n
                                 self.vs[i]['orderBasicCap']=n
             if boolInEdgesPresent == 0:
                 break

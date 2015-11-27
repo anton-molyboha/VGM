@@ -4568,8 +4568,10 @@ class LinearSystemHtdTotFixedDTTrack(object):
             if currentRBC not in e['RBCindex']:
                 adjacents=G.adjacent(e.source)+G.adjacent(e.target)
                 adjacents=np.unique(adjacents) 
+                adjacents=adjacents.tolist()
                 neighbors=G.neighbors(e.source)+G.neighbors(e.target)
                 neighbors=np.unique(neighbors) 
+                neighbors=neighbors.tolist()
                 foundBool=0
                 for j in adjacents:
                     e2=G.es[int(j)]

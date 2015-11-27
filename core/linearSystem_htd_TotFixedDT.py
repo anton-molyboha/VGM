@@ -473,8 +473,8 @@ class LinearSystemHtdTotFixedDT(object):
     def _update_nominal_and_specific_resistance(self, esequence=None):
         """Updates the nominal and specific resistance of a given edge 
         sequence.
-        INPUT: es: Sequence of edge indices as tuple. If not provided, all 
-                   edges are updated.
+        INPUT: esequence: Sequence of edge indices as tuple. If not provided, all 
+                   edges are updated. (WARNING: list should only contain int no np.int)
         OUTPUT: None, the edge properties 'resistance' and 'specificResistance'
                 are updated (or created).
         """
@@ -499,7 +499,7 @@ class LinearSystemHtdTotFixedDT(object):
     def _update_hematocrit(self, esequence=None):
         """Updates the tube hematocrit of a given edge sequence.
         INPUT: es: Sequence of edge indices as tuple. If not provided, all 
-                   edges are updated.
+                   edges are updated. (WARNING: list should only contain int no np.int)
         OUTPUT: None, the edge property 'htt' is updated (or created).
         """
         G = self._G
@@ -697,8 +697,9 @@ class LinearSystemHtdTotFixedDT(object):
             G.vs['inflowE']=inEdges
             G.vs['outflowE']=outEdges
             G.es['noFlow']=[0]*G.ecount()
-            noFlowE=np.unique(noFlowE)
-            G.es[noFlowE]['noFlow']=[1]*len(noFlowE)
+            if noFlowE != []:
+                noFlowE=np.unique(noFlowE)
+                G.es[noFlowE]['noFlow']=[1]*len(noFlowE)
             G['divV']=divergentV
             G['conV']=convergentV
             G['connectV']=connectingV
@@ -709,20 +710,13 @@ class LinearSystemHtdTotFixedDT(object):
             G.vs['vType']=[0]*G.vcount()
             G['av']=G.vs(av_eq=1).indices
             G['vv']=G.vs(vv_eq=1).indices
-            for i in G['av']:
-                G.vs[i]['vType']=1
-            for i in G['vv']:
-                G.vs[i]['vType']=2
-            for i in G['divV']:
-                G.vs[i]['vType']=3
-            for i in G['conV']:
-                G.vs[i]['vType']=4
-            for i in G['connectV']:
-                G.vs[i]['vType']=5
-            for i in G['dConnectV']:
-                G.vs[i]['vType']=6
-            for i in G['noFlowV']:
-                G.vs[i]['vType']=7
+            G.vs[G['av']]['vType']=[1]*len(G['av'])
+            G.vs[G['vv']]['vType']=[2]*len(G['vv'])
+            G.vs[G['divV']]['vType']=[3]*len(G['divV'])
+            G.vs[G['conV']]['vType']=[4]*len(G['conV'])
+            G.vs[G['connectV']]['vType']=[5]*len(G['connectV'])
+            G.vs[G['dConnectV']]['vType']=[6]*len(G['dConnectV'])
+            G.vs[G['noFlowV']]['vType']=[7]*len(G['noFlowV'])
             if len(G.vs(vType_eq=0).indices) > 0:
                 print('BIGERROR vertex type not assigned')
                 print(len(G.vs(vType_eq=0).indices))
@@ -732,8 +726,6 @@ class LinearSystemHtdTotFixedDT(object):
             del(G['dConnectV'])
         #Every Time Step
         else:
-            print('Vtype reupdated')
-            print('Update_Out_and_inflows')
             if G.es['sign']!=G.es['signOld']:
                 sign=np.array(G.es['sign'])
                 signOld=np.array(G.es['signOld'])
@@ -749,7 +741,7 @@ class LinearSystemHtdTotFixedDT(object):
                 for e in edgeList:
                     for vI in G.es[int(e)].tuple:
                         vertices.append(vI)
-                vertices=np.unique(vertices)
+                vertices=np.unique(vertices).tolist()
                 count = 0
                 for vI in vertices:
                     #vI=v.index
@@ -1027,6 +1019,7 @@ class LinearSystemHtdTotFixedDT(object):
             edgeList=[int(i) for i in edgeList]
             vertexList=[int(i) for i in vertexList]
         dischargeHt = [min(htt2htd(e, d, invivo), 1.0) for e,d in zip(G.es[edgeList]['htt'],G.es[edgeList]['diameter'])]
+        boolDummy = 0
         G.es[edgeList]['effResistance'] =[ res * nurel(max(d,4.0), min(dHt,0.6),invivo) for res,dHt,d in zip(G.es[edgeList]['resistance'], \
             dischargeHt,G.es[edgeList]['diamCalcEff'])]
 
@@ -4335,8 +4328,16 @@ class LinearSystemHtdTotFixedDT(object):
                             print(G.vs[vi]['inflowE'])
                             print(G.vs[vi]['outflowE'])
                             print(boolHttEdge)
+                            print(rRBC)
                             print(boolHttEdge2)
+                            print(rRBC2)
                             print(boolHttEdge3)
+                            print(rRBC3)
+                            print(G.vs[vi]['av'])
+                            print(noBifEvents)
+                            print('Pressures')
+                            print(edge.tuple)
+                            print(G.vs[edge.tuple]['pressure'])
                     for j in range(len(edge['rRBC'])-1):
                         if edge['rRBC'][j] > edge['rRBC'][j+1] or edge['rRBC'][j+1]-edge['rRBC'][j] < edge['minDist']-100*eps:
                             print('BIGERROR BEGINNING END 3')
@@ -4612,6 +4613,7 @@ class LinearSystemHtdTotFixedDT(object):
             iteration += 1
             start_time=ttime.time()
             self._update_eff_resistance_and_LS(None, self._vertexUpdate)
+            #self._update_eff_resistance_and_LS(None, None)
             print('Matrix updated')
             self._solve(method, **kwargs)
             print('Matrix solved')
