@@ -115,9 +115,6 @@ class LinearSystemHtdTotFixedDTTrack(object):
         G.es['target']=[e.target for e in G.es]
         G.es['crosssection']=np.array([0.25*np.pi]*G.ecount())*np.array(G.es['diameter'])**2
         G.es['volume']=[e['crosssection']*e['length'] for e in G.es]
-        #Used because the Pries functions are onlt defined for vessels till 3micron
-        G.es['diamCalcEff']=[i if i >= 3. else 3.0 for i in G.es['diameter'] ]
-        G.es['keep_rbcs']=[[] for i in range(G.ecount())]
         
         adjacent=[]
         for i in range(G.vcount()):
@@ -199,7 +196,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
         # Assign capillaries and non capillary vertices
         print('Start assign capillary and non capillary vertices')
         adjacent=[np.array(G.incident(i)) for i in G.vs]
-        G.vs['isCap']=[None]*G.vcount()
+        G.vs['isCap']=[False]*G.vcount()
         self._interfaceVertices=[]
         for i in xrange(G.vcount()):
             #print(i)
@@ -356,30 +353,34 @@ class LinearSystemHtdTotFixedDTTrack(object):
         print('Mass balance verified updated')
         self._update_flow_sign()
         print('Flow sign updated')
-        G.es['posFirstLast']=[None]*G.ecount()
-        G.es['logNormal']=[None]*G.ecount()
-        httBCInit_edges = G.es(httBC_init_ne=None).indices
-        print('Update logNormal')
-        print(len(httBCInit_edges))
-        print(G.ecount())
-        for i in httBCInit_edges:
-            if len(G.es[i]['rRBC']) > 0:
-                if G.es['sign'][i] == 1:
-                    G.es[i]['posFirst_last']=G.es['rRBC'][i][0]
+        if 'posFirstLast' not in G.es.attribute_names():
+            G.es['keep_rbcs']=[[] for i in range(G.ecount())]
+            G.es['posFirstLast']=[None]*G.ecount()
+            G.es['logNormal']=[None]*G.ecount()
+            httBCInit_edges = G.es(httBC_init_ne=None).indices
+            print('Update logNormal')
+            print(len(httBCInit_edges))
+            print(G.ecount())
+            for i in httBCInit_edges:
+                if len(G.es[i]['rRBC']) > 0:
+                    if G.es['sign'][i] == 1:
+                        G.es[i]['posFirst_last']=G.es['rRBC'][i][0]
+                    else:
+                        G.es[i]['posFirst_last']=G.es['length'][i]-G.es['rRBC'][i][-1]
                 else:
-                    G.es[i]['posFirst_last']=G.es['length'][i]-G.es['rRBC'][i][-1]
-            else:
-                G.es[i]['posFirst_last']=G.es['length'][i]
-            G.es[i]['v_last']=0
-            httBCValue=G.es[i]['httBC_init']
-            if self._innerDiam:
-                LDValue = httBCValue
-            else:
-                LDValue=httBCValue*(G.es[i]['diameter']/(G.es[i]['diameter']-2*eslThickness(G.es[i]['diameter'])))**2
-            logNormalMu,logNormalSigma=self._compute_mu_sigma_inlet_RBC_distribution(LDValue)
-            G.es[i]['logNormal']=[logNormalMu,logNormalSigma]
+                    G.es[i]['posFirst_last']=G.es['length'][i]
+                G.es[i]['v_last']=0
+                httBCValue=G.es[i]['httBC_init']
+                if self._innerDiam:
+                    LDValue = httBCValue
+                else:
+                    LDValue=httBCValue*(G.es[i]['diameter']/(G.es[i]['diameter']-2*eslThickness(G.es[i]['diameter'])))**2
+                logNormalMu,logNormalSigma=self._compute_mu_sigma_inlet_RBC_distribution(LDValue)
+                G.es[i]['logNormal']=[logNormalMu,logNormalSigma]
 
         print('Initiallize posFirst_last')
+        if 'signOld' in G.es.attribute_names():
+            del(G.es['signOld'])
         self._update_out_and_inflows_for_vertices()
         print('updated out and inflows')
 	
@@ -595,12 +596,20 @@ class LinearSystemHtdTotFixedDTTrack(object):
                     #inflowEdge
                     else: #G.vs[vI]['pressure'] < G.vs[nI]['pressure']
                         inE.append(adjacents[j])
-                        #Deal with vertices at the interface
-                        #isCap is defined based on the diameter of the InflowEdge
-                        if vI in interfaceVertices and G.es[adjacents[j]]['diameter'] > dThreshold:
-                            G.vs[vI]['isCap']=False
-                        else:
-                            G.vs[vI]['isCap']=True
+                #Deal with vertices at the interface
+                #isCap is defined based on the diameter of the InflowEdge
+                if vI in interfaceVertices:
+                    capCountIn = 0
+                    capCount = 0
+                    for j in adjacents:
+                        if G.es[j]['diameter'] <= dThreshold:
+                            capCount += 1
+                            if j in inE:
+                                capCountIn += 1
+                    if capCountIn == len(inE) and capCount > len(adjacents)/2.:
+                        G.vs[vI]['isCap']=True
+                    else:
+                        G.vs[vI]['isCap']=False
                 #Group into divergent, convergent and connecting Vertices
                 if len(outE) > len(inE) and len(inE) >= 1:
                     divergentV.append(vI)
@@ -682,8 +691,9 @@ class LinearSystemHtdTotFixedDTTrack(object):
             G.vs['inflowE']=inEdges
             G.vs['outflowE']=outEdges
             G.es['noFlow']=[0]*G.ecount()
-            noFlowE=np.unique(noFlowE)
-            G.es[noFlowE]['noFlow']=[1]*len(noFlowE)
+            if noFlowE != []:
+                noFlowE=np.unique(noFlowE)
+                G.es[noFlowE]['noFlow']=[1]*len(noFlowE)
             G['divV']=divergentV
             G['conV']=convergentV
             G['connectV']=connectingV
@@ -694,20 +704,13 @@ class LinearSystemHtdTotFixedDTTrack(object):
             G.vs['vType']=[0]*G.vcount()
             G['av']=G.vs(av_eq=1).indices
             G['vv']=G.vs(vv_eq=1).indices
-            for i in G['av']:
-                G.vs[i]['vType']=1
-            for i in G['vv']:
-                G.vs[i]['vType']=2
-            for i in G['divV']:
-                G.vs[i]['vType']=3
-            for i in G['conV']:
-                G.vs[i]['vType']=4
-            for i in G['connectV']:
-                G.vs[i]['vType']=5
-            for i in G['dConnectV']:
-                G.vs[i]['vType']=6
-            for i in G['noFlowV']:
-                G.vs[i]['vType']=7
+            G.vs[G['av']]['vType']=[1]*len(G['av'])
+            G.vs[G['vv']]['vType']=[2]*len(G['vv'])
+            G.vs[G['divV']]['vType']=[3]*len(G['divV'])
+            G.vs[G['conV']]['vType']=[4]*len(G['conV'])
+            G.vs[G['connectV']]['vType']=[5]*len(G['connectV'])
+            G.vs[G['dConnectV']]['vType']=[6]*len(G['dConnectV'])
+            G.vs[G['noFlowV']]['vType']=[7]*len(G['noFlowV'])
             if len(G.vs(vType_eq=0).indices) > 0:
                 print('BIGERROR vertex type not assigned')
                 print(len(G.vs(vType_eq=0).indices))
@@ -734,7 +737,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
                 for e in edgeList:
                     for vI in G.es[int(e)].tuple:
                         vertices.append(vI)
-                vertices=np.unique(vertices)
+                vertices=np.unique(vertices).tolist()
                 count = 0
                 for vI in vertices:
                     #vI=v.index
@@ -756,12 +759,20 @@ class LinearSystemHtdTotFixedDTTrack(object):
                         #inflowEdge
                         else: #G.vs[vI]['pressure'] < G.vs[nI]['pressure']
                             inE.append(adjacents[j])
-                            #Deal with vertices at the interface
-                            #isCap is defined based on the diameter of the InflowEdge
-                            if vI in interfaceVertices and G.es[adjacents[j]]['diameter'] > dThreshold:
-                                G.vs[vI]['isCap']=False
-                            else:
-                                G.vs[vI]['isCap']=True
+                    #Deal with vertices at the interface
+                    #isCap is defined based on the diameter of the InflowEdge
+                    if vI in interfaceVertices:
+                        capCountIn = 0
+                        capCount = 0
+                        for j in adjacents:
+                            if G.es[j]['diameter'] <= dThreshold:
+                                capCount += 1
+                                if j in inE:
+                                    capCountIn += 1
+                        if capCountIn == len(inE) and capCount > len(adjacents)/2.:
+                            G.vs[vI]['isCap']=True
+                        else:
+                            G.vs[vI]['isCap']=False
                     #Group into divergent, convergent, connecting, doubleConnecting and noFlow Vertices
                     #it is now a divergent Vertex
                     if len(outE) > len(inE) and len(inE) >= 1:
@@ -1013,7 +1024,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
             vertexList=[int(i) for i in vertexList]
         dischargeHt = [min(htt2htd(e, d, invivo), 1.0) for e,d in zip(G.es[edgeList]['htt'],G.es[edgeList]['diameter'])]
         G.es[edgeList]['effResistance'] =[ res * nurel(max(d,4.0), min(dHt,0.6),invivo) for res,dHt,d in zip(G.es[edgeList]['resistance'], \
-            dischargeHt,G.es[edgeList]['diamCalcEff'])]
+            dischargeHt,G.es[edgeList]['diameter'])]
 
         edgeList = G.es(edgeList)
         vertexList = G.vs(vertexList)
@@ -1162,7 +1173,6 @@ class LinearSystemHtdTotFixedDTTrack(object):
             #-------------------------------------------------------------------------------------------
                     #if vertex is connecting vertex
                     elif G.vs[vi]['vType'] == 5:
-                        #print('at connecting vertex')
                         outE=G.vs[vi]['outflowE'][0]
                         oe=G.es[outE]
                         #Calculate possible number of bifurcation Events
@@ -1306,7 +1316,6 @@ class LinearSystemHtdTotFixedDTTrack(object):
           #-------------------------------------------------------------------------------------------
                     #if vertex is divergent vertex
                     elif G.vs[vi]['vType'] == 3:
-                        #print('at divergent vertex')
                         outEdges=G.vs[vi]['outflowE']
                         boolTrifurcation = 0
                         if len(outEdges) > 2:
@@ -2864,6 +2873,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
     #-------------------------------------------------------------------------------------------
                 #if vertex is convergent vertex
                     elif G.vs[vi]['vType'] == 4:
+                        print('at convergent')
                         boolTrifurcation = 0
                         bifRBCsIndex1=bifRBCsIndex
                         noBifEvents1=noBifEvents
@@ -3202,7 +3212,6 @@ class LinearSystemHtdTotFixedDTTrack(object):
          #------------------------------------------------------------------------------------------
                     #if vertex is double connecting vertex
                     elif G.vs[vi]['vType'] == 6:
-                        #print('at double connecting vertex')
                         bifRBCsIndex1=bifRBCsIndex
                         noBifEvents1=noBifEvents
                         inflowEdges=G.vs[vi]['inflowE']
