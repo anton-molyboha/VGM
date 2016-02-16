@@ -78,7 +78,8 @@ def shift(G, offset):
 
     # Shift edge properties:        
     if 'points' in G.es.attribute_names():
-        G.es['points'] = [x + offset for x in G.es['points']]    
+        for e in G.es:
+            e['points'] = [x + offset for x in e['points']]    
 
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
