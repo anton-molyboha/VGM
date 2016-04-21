@@ -17,7 +17,6 @@ from sys import stdout
 
 from copy import deepcopy
 from pyamg import ruge_stuben_solver, smoothed_aggregation_solver
-import pyamg
 from scipy import finfo, ones, zeros
 from scipy.sparse import lil_matrix, linalg
 from physiology import Physiology
@@ -207,7 +206,7 @@ class LinearSystemHtd(object):
         #Convert 'pBC' ['mmHG'] to default Units
         G.vs['pBC']=[v*self._scaleToDef if v != None else None for v in G.vs['pBC']]
         self._update_eff_resistance_and_LS(None, None)
-        self._solve('direct')
+        self._solve('iterative')
         self._G.vs['pressure'] = deepcopy(self._x)
         self._update_flow_and_velocity()
         #Convert defaultUnits to 'pBC' ['mmHG']                                                                             
@@ -803,9 +802,6 @@ class LinearSystemHtd(object):
                                     e['posFirst_last']=rRBC[-1]
                                 break
                     rRBC = np.array(rRBC)
-                    if len(rRBC) > 0:
-                        print('New RBCs introduced')
-                        print(len(rRBC))
                     if e['sign'] == 1:
                         e['rRBC'] = np.concatenate([rRBC[::-1], e['rRBC']])
                         if pTracking:
@@ -877,8 +873,6 @@ class LinearSystemHtd(object):
 		        else:
 		            e['RBCindex']=np.concatenate((e['RBCindex'],G.es[eiIn]['RBCindex'][0:1]))	
             self._update_tube_hematocrit((outEdge.index))
-        else:
-            print('no outEdge present RBC removed')
 
         # Remove RBC from mother vessel and save transit time of RBCs
         time = self._tPlot + self._dt
@@ -1077,7 +1071,6 @@ class LinearSystemHtd(object):
             self._tSample = tSample
             t = t + self._dt
             log.info(t)
-            print(np.sum(G.es['nRBC']))
             #stdout.write("\r%f" % tPlot)
             stdout.flush()
         stdout.write("\rDone. t=%f        \n" % tPlot)

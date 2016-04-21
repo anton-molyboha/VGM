@@ -768,6 +768,11 @@ class VascularGraph(Graph):
         else:
             pressureBool = 0
 
+        if 'points' not in self.es.attribute_names():
+            self.add_points(self.es['length'][eIndex]/3.,edgeList=[eIndex])
+        elif self.es['points'] == None:
+            self.add_points(self.es['length'][eIndex]/3.,edgeList=[eIndex])
+
         #Calculate relDistance for points
         relDistPoints=[]
         lengthSum=0
@@ -779,6 +784,7 @@ class VascularGraph(Graph):
             lengthSum += self.es[eIndex]['lengths2'][i]
             relDistCurrent=lengthSum/self.es[eIndex]['length']
             relDistPoints.append(relDistCurrent)
+            #This ensures that in all the new edges we have at least 3 points in every edge
             if relDistCurrent > relDist and i == 0:
                 smallerBool = 1 
             elif relDistCurrent < relDist and i == len(self.es[eIndex]['lengths2'])-2:
@@ -791,10 +797,6 @@ class VascularGraph(Graph):
                 coordsNewVertex=self.es['points'][eIndex][i] + relDistLocal*vect
                 self.vs[newVertex]['r'] = coordsNewVertex
                 break
-
-        print('Special cases')
-        print(smallerBool)
-        print(largerBool)
 
         if smallerBool == 1:
             coordsNewPoint = self.es[eIndex]['points'][i] + 0.5*relDistLocal*vect
@@ -850,14 +852,14 @@ class VascularGraph(Graph):
             diametersNew=[]
             points=self.es[eIndex]['points']
             diameters=self.es[eIndex]['diameters']
-            for i in range(0,index+1):
+            for i in range(0,index+1): #all points until the new vertex
                 pointsNew.append(points[i])
                 diametersNew.append(diameters[i])
             #calculate diameter of new points
-            length01=np.linalg.norm(points[i] - points[i+1])
+            length01=np.linalg.norm(points[i] - points[i+1])  #length of the edgeSegment in which the new vertex will be lying
             length0_newVertex=np.linalg.norm(points[i] - coordsNewVertex)
             length0_newVertex2=np.sum(self.es[eIndex]['lengths2'][0:index])
-            dnewVertex=diameters[i]+(diameters[i+1]-diameters[i])*length0_newVertex/length01
+            dnewVertex=(diameters[i]*length0_newVertex+diameters[i+1]*(length01-length0_newVertex))/length01
             if pressureBool:
                 pressurenewVertex=self.vs['pressure'][source]+(self.vs['pressure'][target]-self.vs['pressure'][source])*(length0_newVertex+length0_newVertex2)/self.es[eIndex]['length']
             diametersNew.append(dnewVertex)
@@ -866,12 +868,13 @@ class VascularGraph(Graph):
                 pointsNew.append(points[i])
                 diametersNew.append(diameters[i])
 
+        #List of all points and diameters, the new vertex has been introduced as a point in the list, still for the whole edge
         self.es[eIndex]['points']=pointsNew
         self.es[eIndex]['diameters']=diametersNew
         if pressureBool:
             self.vs[newVertex]['pressure']=pressurenewVertex
 
-        #points,diameters should be well arranged now and it can be split at the newly introduced vertex
+        #points,diameters should be well arranged now and can be split at the newly introduced vertex
         #pIndex is the vertex where the edges are split
         pIndex = index + 1
         newEdges = [self.ecount(), self.ecount()+1]
@@ -886,6 +889,14 @@ class VascularGraph(Graph):
             lengths2.append(lengthsNew)
         self.es[newEdges[0]]['lengths2']=lengths2
         self.es[newEdges[0]]['length'] = np.sum(lengths2)
+        lengths=[]
+        for j in range(len(self.es[newEdges[0]]['points'])):
+            if j == 0:
+                lengths.append(self.es[newEdges[0]]['lengths2'][j]/2.)
+            elif j == len(self.es[newEdges[0]]['points'])-1:
+                lengths.append(self.es[newEdges[0]]['lengths2'][j-1]/2.)
+            else:
+                 lengths.append(0.5*self.es[newEdges[0]]['lengths2'][j]+0.5*self.es[newEdges[0]]['lengths2'][j-1])
         diameters2=[]
         resistances=[]
         for j in range(len(self.es[newEdges[0]]['points'])-1):
@@ -899,17 +910,9 @@ class VascularGraph(Graph):
         self.es[newEdges[0]]['effDiam']=(self.es[newEdges[0]]['length']/resistanceTot)**(0.25)
         self.es[newEdges[0]]['diameter']=self.es[newEdges[0]]['effDiam']
         self.es[newEdges[0]]['diameters2']=diameters2
-        lengths=[]
-        for j in range(len(self.es[newEdges[0]]['points'])):
-            if j == 0:
-                lengths.append(self.es[newEdges[0]]['lengths2'][j]/2.)
-            elif j == len(self.es[newEdges[0]]['points'])-1:
-                lengths.append(self.es[newEdges[0]]['lengths2'][j-1]/2.)
-            else:
-                 lengths.append(0.5*self.es[newEdges[0]]['lengths2'][j]+0.5*self.es[newEdges[0]]['lengths2'][j-1])
 
 
-        #print deal with first newEdge
+        #deal with second newEdge
         self.es[newEdges[1]]['diameters'] = self.es[eIndex]['diameters'][pIndex:][::-1]
         self.es[newEdges[1]]['points'] = self.es[eIndex]['points'][pIndex:][::-1]
         #update lengths for first new Edge
@@ -2120,7 +2123,8 @@ class VascularGraph(Graph):
             G.vs['outflowE']=outEdges
             G.es['noFlow']=[0]*G.ecount()
             noFlowE=np.unique(noFlowE)
-            G.es[noFlowE]['noFlow']=[1]*len(noFlowE)
+            if len(noFlowE) > 0:
+                G.es[noFlowE]['noFlow']=[1]*len(noFlowE)
             G['divV']=divergentV
             G['conV']=convergentV
             G['connectV']=connectingV

@@ -4934,6 +4934,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
         G['trackRBCs']=self._trackRBCs
         G['trackRBCsEdges']=self._trackRBCsEdges
         G['trackRBCsWhichLeft']=self._trackRBCsWhichLeft
+        G['RBCindexCurrent']=self._RBCindexCurrent
         #G['spacing']=self._spacing
         filename1='sampledict_BackUp_'+str(BackUpCounter)+'.pkl'
         filename2='G_BackUp'+str(BackUpCounter)+'.pkl'

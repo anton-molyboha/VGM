@@ -462,7 +462,7 @@ def write_pkl(G,filename):
     """
 
     with open(filename,'wb') as f:
-        cPickle.dump(G,f)
+        cPickle.dump(G,f,protocol=2)
     
 
 # -----------------------------------------------------------------------------

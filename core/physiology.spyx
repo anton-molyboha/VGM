@@ -107,7 +107,6 @@ cdef class Physiology(object):
         
         return 1060.0 * self._sf['kg/m^3 -> du']
         
-        
     # -------------------------------------------------------------------------
     # -------------------------------------------------------------------------
 
@@ -496,7 +495,7 @@ cdef class Physiology(object):
 
     cpdef dynamic_blood_viscosity(self, double diameter,bint invivo, 
                                   str kind='a', double discharge_ht=-1.0,
-                                  double tube_ht=-1.0):
+                                  double tube_ht=-1.0,str plasmaType='default'):
         """Returns the dynamic viscosity of blood at 37 degrees centigrate,
         depending on the size and type of the blood vessel.
         INPUT: diameter: Vessel diameter.
@@ -539,15 +538,14 @@ cdef class Physiology(object):
         nu_rel = self.relative_apparent_blood_viscosity(tmpDiameter, 
                                                         discharge_ht, invivo)
         
-        return nu_rel * self.dynamic_plasma_viscosity()
+        return nu_rel * self.dynamic_plasma_viscosity(plasmaType=plasmaType)
                
 
 
     # -------------------------------------------------------------------------
     # -------------------------------------------------------------------------
 
-
-    cpdef dynamic_plasma_viscosity(self):
+    cpdef dynamic_plasma_viscosity(self,str plasmaType='default'):
         """Returns the dynamic viscosity of human plasma at 37 degrees 
         centigrate, as reported in 'Plasma viscosity: A forgotten variable' by 
         Kesmarky et al, 2008.
@@ -557,7 +555,11 @@ cdef class Physiology(object):
         
         # The value reported by Kesmarky is scaled from [Pa s] to default 
         # units:
-        return 0.0012 * self._sf['Pa*s -> du']
+        if plasmaType == 'default':
+            return 0.0012 * self._sf['Pa*s -> du']
+        elif plasmaType == 'francesco':
+            return 0.00196 * self._sf['Pa*s -> du']
+        
 
     # -------------------------------------------------------------------------
     # -------------------------------------------------------------------------
@@ -1010,6 +1012,8 @@ cdef class Physiology(object):
             return 89.16 * self._sf['fL -> du']
         elif species == 'mouse':
             return 49.0 * self._sf['fL -> du']
+        elif species == 'francesco':
+            return 60.0 * self._sf['fL -> du']
 
 
     # -------------------------------------------------------------------------
