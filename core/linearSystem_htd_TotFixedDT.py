@@ -285,14 +285,11 @@ class LinearSystemHtdTotFixedDT(object):
         for v in G.vs:
             if v['pBC'] != None:
                 v['pBC']=v['pBC']*self._scaleToDef
-        ##HERE
 	#self._effResistance=[]
         #self._htt=[]
-        ##HERE
         #self._effResistance.append(G.es['effResistance'])
         #self._htt.append(G.es['htt'])
         self._update_eff_resistance_and_LS(None, None)
-        ##HERE
         #self._effResistance.append(G.es['effResistance'])
         #self._htt.append(G.es['htt'])
         print('Matrix created')
@@ -1136,10 +1133,6 @@ class LinearSystemHtdTotFixedDT(object):
             else:
                 vi=e.source
             edgesInvolved=G.adjacent(vi)
-            #print('Current vertex')
-            #print(G.vs[vi]['inflowE'])
-	    #print(G.vs[vi]['outflowE'])
-            #print(edgesInvolved)
             nRBCSumBefore = np.sum(G.es[edgesInvolved]['nRBC'])
             overshootsNo=0 #Reset - Number of overshoots acutally taking place (considers possible number of bifurcation events)
             #If there is a BC for the edge new RBCs have to be introduced
@@ -1404,9 +1397,36 @@ class LinearSystemHtdTotFixedDT(object):
                                 else bifRBCsIndex[:posNoBifEvents]]
                             overshootsNo=posNoBifEvents
                         if nonCap:
-                            overshootsNo1 = np.floor(ratio1 * overshootsNo)
-                            overshootsNo3 = np.floor(ratio3 * overshootsNo)
-                            overshootsNo2 = overshootsNo - overshootsNo1 - overshootsNo3
+                            if not boolTrifurcation:
+                                if ratio1 != 0:
+                                    def errorDistributeRBCs(n1):
+                                        return n1/float(overshootsNo)-ratio1
+                                    resultMinimizeError = root(errorDistributeRBCs,np.ceil(ratio1 * overshootsNo))
+                                    overshootsNo1=int(np.round(resultMinimizeError['x']))
+                                else:
+                                    overshootsNo1 = 0
+                                overshootsNo2 = overshootsNo - overshootsNo1
+                                overshootsNo3 = 0
+                            else:
+                                if ratio1 != 0 and ratio2 != 0:
+                                    def errorDistributeRBCs(n12):
+                                        return [n12[0]/float(overshootsNo)-ratio1,n12[1]/float(overshootsNo)-ratio2]
+                                    resultMinimizeError = root(errorDistributeRBCs,[np.ceil(ratio1 * overshootsNo),np.ceil(ratio2 * overshootsNo)])
+                                    overshootsNo1=int(np.round(resultMinimizeError['x'][0]))
+                                    overshootsNo2=int(np.round(resultMinimizeError['x'][1]))
+                                elif ratio1 != 0:
+                                    def errorDistributeRBCs(n1):
+                                        return n1/float(overshootsNo)-ratio1
+                                    resultMinimizeError = root(errorDistributeRBCs,np.ceil(ratio1 * overshootsNo))
+                                    overshootsNo1=int(np.round(resultMinimizeError['x']))
+                                    overshootsNo2=0
+                                elif ratio2 != 0:
+                                    def errorDistributeRBCs(n2):
+                                        return n2/float(overshootsNo)-ratio2
+                                    resultMinimizeError = root(errorDistributeRBCs,np.ceil(ratio2 * overshootsNo))
+                                    overshootsNo2=int(np.round(resultMinimizeError['x']))
+                                    overshootsNo1=0
+                                overshootsNo3 = overshootsNo - overshootsNo1 - overshootsNo2
                             if overshootsNo1 > posNoBifEventsPref:
                                 if ratio2 > ratio3:
                                     overshootsNo2 += overshootsNo1 - posNoBifEventsPref
@@ -1591,10 +1611,7 @@ class LinearSystemHtdTotFixedDT(object):
                                                             else:
                                                                 positionPref3.append(position3[index3])
                                                 else:
-                                                    #print('Here 1')
-                                                    #print(position3[index3])
                                                     positionPref3.append(position3[index3])
-                                                    #print(positionPref3)
                                                 counterPref3.append(index)
                                                 countNo3 += 1
                                                 last = 3
@@ -1656,10 +1673,7 @@ class LinearSystemHtdTotFixedDT(object):
                                                             else:
                                                                 positionPref3.append(position3[index3])
                                                 else:
-                                                    #print('Here 2')
-                                                    #print(position3[index3])
                                                     positionPref3.append(position3[index3])
-                                                    #print(positionPref3)
                                                 counterPref3.append(index)
                                                 countNo3 += 1
                                                 last = 3
@@ -1720,10 +1734,7 @@ class LinearSystemHtdTotFixedDT(object):
                                                         else:
                                                             positionPref3.append(position3[index3])
                                             else:
-                                                #print('Here 3')
-                                                #print(position3[index3])
                                                 positionPref3.append(position3[index3])
-                                                #print(positionPref3)
                                             counterPref3.append(index)
                                             countNo3 += 1
                                             last = 3
@@ -2131,8 +2142,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                                 if oe3['sign'] == 1.0:
                                                                                     position3[index3]=positionPref3[-1]-oe3['minDist']
                                                                                     if position3[index3] > 0:
-                                                                                        #print('Here 4')
-                                                                                        #print(position3[index3])
                                                                                         positionPref3.append(position3[index3])
                                                                                         counterPref3.append(index)
                                                                                         countPref3 += 1
@@ -2145,8 +2154,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                                 else:
                                                                                     position3[index3]=positionPref3[-1]+oe3['minDist']
                                                                                     if position3[index3] < oe3['length']:
-                                                                                        #print('Here 5')
-                                                                                        #print(position3[index3])
                                                                                         positionPref3.append(position3[index3])
                                                                                         counterPref3.append(index)
                                                                                         countPref3 += 1
@@ -2157,8 +2164,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                                         print(np.floor(space3/oe3['minDist']))
                                                                         #There is enough space in outEdge 3
                                                                         else:
-                                                                            #print('Here 6')
-                                                                            #print(position3[index3])
                                                                             positionPref3.append(position3[index3])
                                                                             counterPref3.append(index)
                                                                             countPref3 += 1
@@ -2185,8 +2190,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                                 #Avoid overshooting whole vessels
                                                                                 if position3[index3] < 0:
                                                                                     position3[index3]=0
-                                                                        #print('Here 7')
-                                                                        #print(position3[index3])
                                                                         positionPref3.append(position3[index3])
                                                                         counterPref3.append(index)
                                                                         countPref3 += 1
@@ -2443,8 +2446,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                         if oe3['sign'] == 1.0:
                                                                             position3[index3]=positionPref3[-1]-oe3['minDist']
                                                                             if position3[index3] > 0:
-                                                                                #print('Here 8')
-                                                                                #print(position3[index3])
                                                                                 positionPref3.append(position3[index3])
                                                                                 counterPref3.append(index)
                                                                                 countPref3 += 1
@@ -2457,8 +2458,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                         else:
                                                                             position3[index3]=positionPref3[-1]+oe3['minDist']
                                                                             if position3[index3] < oe3['length']:
-                                                                                #print('Here 9')
-                                                                                #print(position3[index3])
                                                                                 positionPref3.append(position3[index3])
                                                                                 counterPref3.append(index)
                                                                                 countPref3 += 1
@@ -2469,8 +2468,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                                 print(np.floor(space3/oe3['minDist']))
                                                                 #There is enough space in outEdge 3
                                                                 else:
-                                                                    #print('Here 10')
-                                                                    #print(position3[index3])
                                                                     positionPref3.append(position3[index3])
                                                                     counterPref3.append(index)
                                                                     countPref3 += 1
@@ -2497,8 +2494,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                         #Avoid overshooting whole vessels
                                                                             if position3[index3] < 0:
                                                                                 position3[index3]=0
-                                                                #print('Here 11')
-                                                                #print(position3[index3])
                                                                 positionPref3.append(position3[index3])
                                                                 counterPref3.append(index)
                                                                 countPref3 += 1
@@ -2646,8 +2641,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                     if oe3['sign'] == 1.0:
                                                                         position3[index3]=positionPref3[-1]-oe3['minDist']
                                                                         if position3[index3] > 0:
-                                                                            #print('Here 12')
-                                                                            #print(position3[index3])
                                                                             positionPref3.append(position3[index3])
                                                                             counterPref3.append(index)
                                                                             countPref3 += 1
@@ -2660,8 +2653,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                     else:
                                                                         position3[index3]=positionPref3[-1]+oe3['minDist']
                                                                         if position3[index3] < oe3['length']:
-                                                                            #print('Here 13')
-                                                                            #print(position3[index3])
                                                                             positionPref3.append(position3[index3])
                                                                             counterPref3.append(index)
                                                                             countPref3 += 1
@@ -2672,8 +2663,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                             print(np.floor(space3/oe3['minDist']))
                                                             #There is enough space in outEdge 3
                                                             else:
-                                                                #print('Here 14')
-                                                                #print(position3[index3])
                                                                 positionPref3.append(position3[index3])
                                                                 counterPref3.append(index)
                                                                 countPref3 += 1
@@ -2694,8 +2683,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                 else:
                                                                     if position3[index3] < 0:
                                                                         position3[index3]=0
-                                                            #print('Here 15')
-                                                            #print(position3[index3])
                                                             positionPref3.append(position3[index3])
                                                             counterPref3.append(index)
                                                             countPref3 += 1
@@ -2778,8 +2765,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                         if oe3['sign'] == 1.0:
                                                             position3[index3]=positionPref3[-1]-oe3['minDist']
                                                             if position3[index3] > 0:
-                                                                #print('Here 16')
-                                                                #print(position3[index3])
                                                                 positionPref3.append(position3[index3])
                                                                 counterPref3.append(index)
                                                                 countPref3 += 1
@@ -2789,8 +2774,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                         else: 
                                                             position3[index3]=positionPref3[-1]+oe3['minDist']
                                                             if position3[index3] < oe3['length']:
-                                                                #print('Here 17')
-                                                                #print(position3[index3])
                                                                 positionPref3.append(position3[index3])
                                                                 counterPref3.append(index)
                                                                 countPref3 += 1
@@ -2799,8 +2782,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                 break
                                                     #There is enough space in outEdge 3
                                                     else:
-                                                        #print('Here 18')
-                                                        #print(position3[index3])
                                                         positionPref3.append(position3[index3])
                                                         counterPref3.append(index)
                                                         countPref3 += 1
@@ -2820,8 +2801,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                         else:
                                                             if position3[index3] < 0:
                                                                 position3[index3]=0
-                                                    #print('Here 19')
-                                                    #print(position3[index3])
                                                     positionPref3.append(position3[index3])
                                                     counterPref3.append(index)
                                                     countPref3 += 1
@@ -3291,8 +3270,14 @@ class LinearSystemHtdTotFixedDT(object):
                         posNoBifEvents=int(posNoBifEventsPref+posNoBifEventsPref2)
                         noBifEvents = noBifEvents1 + noBifEvents2
                         if nonCap:
-                            overshootsNo1 = np.floor(ratio1 * noBifEvents)
-                            overshootsNo2 = noBifEvents - overshootsNo1
+                            if ratio1 != 0:
+                                def errorDistributeRBCs(n1):
+                                    return n1/float(overshootsNo)-ratio1
+                                resultMinimizeError = root(errorDistributeRBCs,np.ceil(ratio1 * overshootsNo))
+                                overshootsNo1=int(np.round(resultMinimizeError['x']))
+                            else:
+                                overshootsNo1 = 0
+                            overshootsNo2 = overshootsNo - overshootsNo1
                             stuck1=0
                             stuck2=0
                             if overshootsNo1 > posNoBifEventsPref:
@@ -4638,12 +4623,10 @@ class LinearSystemHtdTotFixedDT(object):
                 break
             iteration += 1
             start_time=ttime.time()
-            ##HERE
             #self._effResistance.append(G.es['effResistance'])
             #self._htt.append(G.es['htt'])
             self._update_eff_resistance_and_LS(None, self._vertexUpdate)
             #self._update_eff_resistance_and_LS(None, None)
-            ##HERE
             #self._effResistance.append(G.es['effResistance'])
             #self._htt.append(G.es['htt'])
             #self._update_eff_resistance_and_LS(None, None)
@@ -4751,7 +4734,6 @@ class LinearSystemHtdTotFixedDT(object):
             print('RBCs propagated')
             self._update_hematocrit(self._edgeUpdate)
             #self._update_hematocrit(None)
-            ##HERE
             #self._effResistance.append(G.es['effResistance'])
             #self._htt.append(G.es['htt'])
             print('Hematocrit updated')
