@@ -23,11 +23,11 @@ def read_csv(vertexFile='vertices.csv', edgeFile='edges.csv'):
     """Construct a VascularGraph from two CSV files, containing 1) vertex 
     coordinates and 2) edgelist and vessel diameters respectively.
     INPUT: vertexFile: The name of the vertex file. The expected format is
-                       x1, y1, z1
-                       x2, y2, z2
+                       x1, y1, z1, kind1
+                       x2, y2, z2, kind2
                        ...
                        Where x,y,z are the floating point coordinates of the
-                       vertices.
+                       vertices, kind 'a'|'v' -- type of vertice.
            edgeFile: The name of the edge file. The expected format is
                      a1, b1, d1
                      a2, b2, d2
@@ -44,8 +44,8 @@ def read_csv(vertexFile='vertices.csv', edgeFile='edges.csv'):
     for line in reader:
         coordinates.append(np.array([float(line[0]), 
                                      float(line[1]),
-                                     0.0]))
-        kind.append(int(line[2]))
+                                     float(line[2])]))
+        kind.append(line[3])
     f.close()
     
     # Read edgelist and diameters:
@@ -54,7 +54,7 @@ def read_csv(vertexFile='vertices.csv', edgeFile='edges.csv'):
     edgelist = []
     diameters = []
     for line in reader:
-        edgelist.append((int(line[0])-1, int(line[1])-1))
+        edgelist.append((int(line[0]), int(line[1])))
         diameters.append(float(line[2]))
     f.close()
     
