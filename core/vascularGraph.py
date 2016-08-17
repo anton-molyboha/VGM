@@ -301,8 +301,7 @@ class VascularGraph(Graph):
                               maxima[2] - v['r'][2] > distance and
                               v['r'][2] - minima[2] > distance]
         else:
-            raise KeyError('Only domains of shape cuboid or cylinder are \
-                            currently implemented')
+            raise KeyError('Only domains of shape cuboid or cylinder are currently implemented')
         return insideVertices                    
     
     #--------------------------------------------------------------------------
