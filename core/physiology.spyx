@@ -368,6 +368,8 @@ cdef class Physiology(object):
         root of the mean red blood cell volume (rat 55fl, human 92fl).
         The extension to in-vivo was presented in a 2005 paper 'Microvascular
         blood viscosity in vivo and the endothelial surface layer'.
+        If the diameter is > 1000 micrometers the invitro formulation does not work
+        anymore. The discharge hematocrit is set equal to the tube hematocrit
         INPUT: tube_ht: Tube Ht expressed as a fraction [0,1]
                d: Diameter of the vessel.          
                invivo: Boolean, whether or not to consider ESL influence.
@@ -393,7 +395,10 @@ cdef class Physiology(object):
             # et al. 2005, which would result in: return htd / (d / dph)**2
         else:
             x = 1 + 1.7 * exp(-0.415*d) - 0.6 * exp(-0.011*d)
-            htd = 0.5*(x - sqrt(-4*tube_ht*x + x**2 + 4*tube_ht))/(x - 1)
+            if d < 1000:
+                htd = 0.5*(x - sqrt(-4*tube_ht*x + x**2 + 4*tube_ht))/(x - 1)
+            else:
+                htd=tube_ht
             if htd > 0.99:
                 htd = 1.0
             return htd
@@ -733,8 +738,8 @@ cdef class Physiology(object):
                                   double df, double htd):
         """Returns the fraction of red blood cells entering a daughter branch, 
         based on the fractional blood flow into that branch. This is an 
-        empirical relation, published by Pries et al. in 1990 'Blood flow in 
-        microvascular networks - experiments and simulation'. Note that it only
+        empirical relation, published by Pries et al. in 2005 'Microvascular blood viscosity in 
+        vivo and the endothelial surface layer'. Note that it only
         applies to a bifurcation of coordination number 3 (that is one mother 
         and two daughter branches)!
         INPUT: fqb: Fractional blood flow into the daughter branch.

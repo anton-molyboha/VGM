@@ -108,6 +108,15 @@ class LinearSystemHtd(object):
             self._pTracking=0
         pTracking = self._pTracking
 
+        if kwargs.has_key('effResBeta'):
+            self._effRes_Beta = kwargs['effResBeta']
+        else:
+            self._effRes_Beta = 0
+
+        if kwargs.has_key('vfTeta'):
+            self._vf_Teta = kwargs['vfTeta']
+        else:
+            self._vf_Teta = 0
         # Set initial pressure and flow to zero:
 	if init:
           G.vs['pressure']=zeros(nVertices)                                                                                    
@@ -601,7 +610,11 @@ class LinearSystemHtd(object):
         """
         G = self._G
         invivo=self._invivo
-        vf = self._P.velocity_factor
+        vf_Teta=self._vf_Teta
+        if vf_Teta == 0:
+            vf = self._P.velocity_factor
+        else:
+            vf = vf_Teta
         pi=np.pi
         G.es['flow'] = [abs(G.vs[e.source]['pressure'] -                                           
                             G.vs[e.target]['pressure']) /res                        
@@ -609,10 +622,13 @@ class LinearSystemHtd(object):
 
         # RBC velocity is not defined if tube_ht==0, using plasma velocity
         # instead:
-        G.es['v'] = [4 * flow * vf(d, invivo, tube_ht=htt) /                  
+        if vf_Teta == 0:
+            G.es['v'] = [4 * flow * vf(d, invivo, tube_ht=htt) /                  
                     (pi * d**2) if htt > 0 else                                
                     4 * flow / (pi * d**2)                                     
                     for flow,d,htt in zip(G.es['flow'],G.es['diameter'],G.es['htt'])]
+        else:
+            G.es['v'] = [4 * flow * vf /(pi * d**2) for flow,d in zip(G.es['flow'],G.es['diameter'])]
 
     #--------------------------------------------------------------------------
 
@@ -645,6 +661,8 @@ class LinearSystemHtd(object):
         b = self._b
         x = self._x
         invivo = self._invivo
+        effRes_Beta=self._effRes_Beta
+        vf_Teta=self._vf_Teta
 
         htt2htd = P.tube_to_discharge_hematocrit
         nurel = P.relative_apparent_blood_viscosity
@@ -665,8 +683,15 @@ class LinearSystemHtd(object):
         edgeList = G.es(edgeList)
         vertexList = G.vs(vertexList)
 
-        dischargeHt = [min(htt2htd(e, d, invivo), 0.99) for e,d in zip(edgeList['htt'],edgeList['diameter'])]
-        edgeList['effResistance'] =[ res * nurel(d, dHt,invivo) for res,dHt,d in zip(edgeList['resistance'],dischargeHt,edgeList['diameter'])]
+        if vf_Teta == 0:
+            dischargeHt = [min(htt2htd(e, d, invivo), 0.99) for e,d in zip(edgeList['htt'],edgeList['diameter'])]
+        else:
+            dischargeHt = [htt*vf_Teta for htt in edgeList['htt']]
+
+        if effRes_Beta == 0:
+            edgeList['effResistance'] =[ res * nurel(d, dHt,invivo) for res,dHt,d in zip(edgeList['resistance'],dischargeHt,edgeList['diameter'])]
+        else:
+            edgeList['effResistance'] =[ res *  (1+effRes_Beta*htt) for res,htt in zip(edgeList['resistance'],edgeList['htt'])]
 
         for vertex in vertexList:
             i = vertex.index
@@ -1071,7 +1096,7 @@ class LinearSystemHtd(object):
             self._tSample = tSample
             t = t + self._dt
             log.info(t)
-            #stdout.write("\r%f" % tPlot)
+            stdout.write("\r%f" % tPlot)
             stdout.flush()
         stdout.write("\rDone. t=%f        \n" % tPlot)
         log.info("Time taken: %.2f" % (ttime.time()-t1))
@@ -1157,6 +1182,7 @@ class LinearSystemHtd(object):
         sampledict = self._sampledict
         G = self._G
         invivo = self._invivo
+        vf_Teta=self._vf_Teta
         
         htt2htd = self._P.tube_to_discharge_hematocrit
         du = self._G['defaultUnits']
@@ -1164,7 +1190,10 @@ class LinearSystemHtd(object):
         #Convert default units to ['mmHG'] 
         G.vs['pressure']=[v/self._scaleToDef for v in G.vs['pressure']]
  
-        G.es['htd'] = [htt2htd(e['htt'], e['diameter'],invivo) for e in G.es]
+        if vf_Teta == 0:
+            G.es['htd'] = [htt2htd(e['htt'], e['diameter'],invivo) for e in G.es]
+        else:
+            G.es['htd'] = [e['htt']*vf_Teta for e in G.es]
         G.es['rbcFlow'] = [e['flow'] * e['htd'] for e in G.es]
         G.es['plasmaFlow'] = [e['flow'] - e['rbcFlow'] for e in G.es]
         G.es['nRBC'] = [len(e['rRBC']) for e in G.es]

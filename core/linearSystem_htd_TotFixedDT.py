@@ -110,9 +110,11 @@ class LinearSystemHtdTotFixedDT(object):
         G.es['crosssection']=np.array([0.25*np.pi]*G.ecount())*np.array(G.es['diameter'])**2
         G.es['volume']=[e['crosssection']*e['length'] for e in G.es]
         adjacent=[]
-        for i in range(G.vcount()):
+        for i in xrange(G.vcount()):
             adjacent.append(G.adjacent(i))
         G.vs['adjacent']=adjacent
+        G['av']=G.vs(av_eq=1).indices
+        G['vv']=G.vs(vv_eq=1).indices
 
         htd2htt=self._P.discharge_to_tube_hematocrit
         htt2htd = self._P.tube_to_discharge_hematocrit
@@ -307,7 +309,7 @@ class LinearSystemHtdTotFixedDT(object):
         self._update_flow_sign()
         print('Flow sign updated')
         if 'posFirstLast' not in G.es.attribute_names():
-            G.es['keep_rbcs']=[[] for i in range(G.ecount())]
+            G.es['keep_rbcs']=[[] for i in xrange(G.ecount())]
             G.es['posFirstLast']=[None]*G.ecount()
             G.es['logNormal']=[None]*G.ecount()
             httBCInit_edges = G.es(httBC_init_ne=None).indices
@@ -585,6 +587,7 @@ class LinearSystemHtdTotFixedDT(object):
                 G.vs['outflowE']: Index of edge in which the RBC resides.
         """    
         G=self._G
+        eslThickness = self._P.esl_thickness
         #Beginning    
         inEdges=[]
         outEdges=[]
@@ -768,7 +771,7 @@ class LinearSystemHtdTotFixedDT(object):
                     neighbors=G.neighbors(vI)
                     pressure = G.vs[vI]['pressure']
                     adjacents=G.adjacent(vI)
-                    for j in range(len(neighbors)):
+                    for j in xrange(len(neighbors)):
                         nI=neighbors[j]
                         #outEdge
                         if pressure > G.vs[nI]['pressure']:
@@ -1026,8 +1029,8 @@ class LinearSystemHtdTotFixedDT(object):
         nurel = P.relative_apparent_blood_viscosity
 
         if vertex is None:
-            vertexList = range(G.vcount())
-            edgeList = range(G.ecount())
+            vertexList = xrange(G.vcount())
+            edgeList = xrange(G.ecount())
         else:
             vertexList=[]
             edgeList=[]
@@ -1238,7 +1241,7 @@ class LinearSystemHtdTotFixedDT(object):
 			    #BUT due to different velocity factors RBCs cann "ran into each other" at connecting bifurcations
                             overshootsNoReduce=0
                             #Check if RBCs ran into another
-                            for i in range(overshootsNo-1):
+                            for i in xrange(overshootsNo-1):
                                 index=-1*(i+1)
                                 if position[index]-position[index-1] < oe['minDist']:
                                     position[index-1]=position[index]-oe['minDist']
@@ -1252,7 +1255,7 @@ class LinearSystemHtdTotFixedDT(object):
                                 if oe['sign'] == 1 and position[-1] > oe['rRBC'][0]-oe['minDist']:
                                     posLead=position[-1]
                                     position = np.array(position)-np.array([posLead-(oe['rRBC'][0]-oe['minDist'])]*len(position))
-                                    for i in range(overshootsNo):
+                                    for i in xrange(overshootsNo):
                                         if position[i] < 0:
                                             overshootsNoReduce2 += 1
                                         else:
@@ -1260,7 +1263,7 @@ class LinearSystemHtdTotFixedDT(object):
                                 elif oe['sign'] == -1 and position[-1] > oe['length']-oe['rRBC'][-1]-oe['minDist']:
                                     posLead=position[-1]
                                     position = np.array(position)-np.array([posLead-(oe['length']-oe['rRBC'][-1]-oe['minDist'])]*len(position))
-                                    for i in range(overshootsNo):
+                                    for i in xrange(overshootsNo):
                                         if position[i] < 0:
                                             overshootsNoReduce2 += 1
                                         else:
@@ -1285,7 +1288,7 @@ class LinearSystemHtdTotFixedDT(object):
                         #Deal with RBCs which could not be reassigned to the new edge because of a traffic jam
                         noStuckRBCs=len(bifRBCsIndex)-overshootsNo
                         #move stuck RBCs back into vessel
-                        for i in range(noStuckRBCs):
+                        for i in xrange(noStuckRBCs):
                             index=-1*(i+1) if sign == 1.0 else i
                             e['rRBC'][index]=e['length']-i*e['minDist'] if sign == 1.0 else 0+i*e['minDist']
                         #Recheck if the distance between the newly introduces RBCs is still big enough 
@@ -1293,7 +1296,7 @@ class LinearSystemHtdTotFixedDT(object):
                             moved = 0
                             count = 0
                             if sign == 1.0:
-                                for i in range(-1,-1*(len(e['rRBC'])),-1):
+                                for i in xrange(-1,-1*(len(e['rRBC'])),-1):
                                     index=i-1
                                     if e['rRBC'][i] < e['rRBC'][index] or abs(e['rRBC'][i]-e['rRBC'][index]) < e['minDist']:
                                         e['rRBC'][index]=e['rRBC'][i]-e['minDist']
@@ -1304,7 +1307,7 @@ class LinearSystemHtdTotFixedDT(object):
                                     if count >= noStuckRBCs and moved == 0:
                                         break
                             else:
-                                for i in range(len(e['rRBC'])-1):
+                                for i in xrange(len(e['rRBC'])-1):
                                     index=i+1
                                     if e['rRBC'][i] > e['rRBC'][index] or abs(e['rRBC'][i]-e['rRBC'][index]) < e['minDist']:
                                         e['rRBC'][index]=e['rRBC'][i]+e['minDist']
@@ -1369,16 +1372,16 @@ class LinearSystemHtdTotFixedDT(object):
                             else:
                                 distToFirst3=oe3['length']
                         #Check how many RBCs are allowed by nMax for outEPref
-                        posNoBifEventsPref=np.floor(distToFirst/oe['minDist'])
+                        posNoBifEventsPref=int(np.floor(distToFirst/oe['minDist']))
                         if posNoBifEventsPref + len(oe['rRBC']) > oe['nMax']:
                             posNoBifEventsPref = oe['nMax'] - len(oe['rRBC'])
                         #Check how many RBCs are allowed by nMax for outEPref2
-                        posNoBifEventsPref2=np.floor(distToFirst2/oe2['minDist'])
+                        posNoBifEventsPref2=int(np.floor(distToFirst2/oe2['minDist']))
                         if posNoBifEventsPref2 + len(oe2['rRBC']) > oe2['nMax']:
                             posNoBifEventsPref2 = oe2['nMax'] - len(oe2['rRBC'])
                         #Check how many RBCs are allowed by nMax for outEPref3
                         if boolTrifurcation:
-                            posNoBifEventsPref3=np.floor(distToFirst3/oe3['minDist'])
+                            posNoBifEventsPref3=int(np.floor(distToFirst3/oe3['minDist']))
                             if posNoBifEventsPref3 + len(oe3['rRBC']) > oe3['nMax']:
                                 posNoBifEventsPref3 = oe3['nMax'] - len(oe3['rRBC'])
                         else:
@@ -1398,7 +1401,7 @@ class LinearSystemHtdTotFixedDT(object):
                             overshootsNo=posNoBifEvents
                         if nonCap:
                             if not boolTrifurcation:
-                                if ratio1 != 0:
+                                if ratio1 != 0 and overshootsNo != 0:
                                     def errorDistributeRBCs(n1):
                                         return n1/float(overshootsNo)-ratio1
                                     resultMinimizeError = root(errorDistributeRBCs,np.ceil(ratio1 * overshootsNo))
@@ -1408,19 +1411,19 @@ class LinearSystemHtdTotFixedDT(object):
                                 overshootsNo2 = overshootsNo - overshootsNo1
                                 overshootsNo3 = 0
                             else:
-                                if ratio1 != 0 and ratio2 != 0:
+                                if ratio1 != 0 and ratio2 != 0 and overshootsNo != 0:
                                     def errorDistributeRBCs(n12):
                                         return [n12[0]/float(overshootsNo)-ratio1,n12[1]/float(overshootsNo)-ratio2]
                                     resultMinimizeError = root(errorDistributeRBCs,[np.ceil(ratio1 * overshootsNo),np.ceil(ratio2 * overshootsNo)])
                                     overshootsNo1=int(np.round(resultMinimizeError['x'][0]))
                                     overshootsNo2=int(np.round(resultMinimizeError['x'][1]))
-                                elif ratio1 != 0:
+                                elif ratio1 != 0 and overshootsNo != 0:
                                     def errorDistributeRBCs(n1):
                                         return n1/float(overshootsNo)-ratio1
                                     resultMinimizeError = root(errorDistributeRBCs,np.ceil(ratio1 * overshootsNo))
                                     overshootsNo1=int(np.round(resultMinimizeError['x']))
                                     overshootsNo2=0
-                                elif ratio2 != 0:
+                                elif ratio2 != 0 and overshootsNo != 0:
                                     def errorDistributeRBCs(n2):
                                         return n2/float(overshootsNo)-ratio2
                                     resultMinimizeError = root(errorDistributeRBCs,np.ceil(ratio2 * overshootsNo))
@@ -1520,7 +1523,7 @@ class LinearSystemHtdTotFixedDT(object):
                                 counterPref3=[]
                                 counterPref2=[]
                                 counterPref1=[]
-                                for i in range(overshootsNo):
+                                for i in xrange(overshootsNo):
                                     index=-1*(i+1) if sign == 1.0 else i
                                     index1=-1*(i+1) if oe['sign'] == 1.0 else i
                                     index2=-1*(i+1) if oe2['sign'] == 1.0 else i
@@ -1828,7 +1831,7 @@ class LinearSystemHtdTotFixedDT(object):
                                     if oe['sign'] == 1:
                                         if positionPref1[-1] < 0:
                                             positionPref1[-1] = 0
-                                            for i in range(-1,-1*(len(positionPref1)),-1):
+                                            for i in xrange(-1,-1*(len(positionPref1)),-1):
                                                 if positionPref1[i-1]-positionPref1[i] < oe['minDist'] - eps:
                                                     positionPref1[i-1]=positionPref1[i] + oe['minDist']
                                                 else:
@@ -1842,7 +1845,7 @@ class LinearSystemHtdTotFixedDT(object):
                                                     print(posOld)
                                         if positionPref1[0] > oe['length']:
                                             positionPref1[0] = oe['length']
-                                            for i in range(len(positionPref1)-1):
+                                            for i in xrange(len(positionPref1)-1):
                                                 if positionPref1[i]-positionPref1[i+1] < oe['minDist'] - eps:
                                                     positionPref1[i+1]=positionPref1[i] - oe['minDist']
                                                 else:
@@ -1853,7 +1856,7 @@ class LinearSystemHtdTotFixedDT(object):
                                     else:
                                         if positionPref1[-1] > oe['length']:
                                             positionPref1[-1] = oe['length']
-                                            for i in range(-1,-1*(len(positionPref1)),-1):
+                                            for i in xrange(-1,-1*(len(positionPref1)),-1):
                                                 if positionPref1[i]-positionPref1[i-1] < oe['minDist'] - eps:
                                                     positionPref1[i-1]=positionPref1[i] - oe['minDist']
                                                 else:
@@ -1867,7 +1870,7 @@ class LinearSystemHtdTotFixedDT(object):
                                                     print(posOld)
                                         if positionPref1[0] < 0:
                                             positionPref1[0] = 0
-                                            for i in range(len(positionPref1)-1):
+                                            for i in xrange(len(positionPref1)-1):
                                                 if positionPref1[i+1]-positionPref1[i] < oe['minDist'] - eps:
                                                     positionPref1[i+1]=positionPref1[i] + oe['minDist']
                                                 else:
@@ -1880,7 +1883,7 @@ class LinearSystemHtdTotFixedDT(object):
                                     if oe2['sign'] == 1:
                                         if positionPref2[-1] < 0:
                                             positionPref2[-1] = 0
-                                            for i in range(-1,-1*(len(positionPref2)),-1):
+                                            for i in xrange(-1,-1*(len(positionPref2)),-1):
                                                 if positionPref2[i-1]-positionPref2[i] < oe2['minDist'] + eps:
                                                     positionPref2[i-1]=positionPref2[i] + oe2['minDist']
                                                 else:
@@ -1894,7 +1897,7 @@ class LinearSystemHtdTotFixedDT(object):
                                                     print(posOld)
                                         if positionPref2[0] > oe2['length']:
                                             positionPref2[0] = oe2['length']
-                                            for i in range(len(positionPref2)-1):
+                                            for i in xrange(len(positionPref2)-1):
                                                 if positionPref2[i]-positionPref2[i+1] < oe2['minDist'] + eps:
                                                     positionPref2[i+1]=positionPref2[i] - oe2['minDist']
                                                 else:
@@ -1905,7 +1908,7 @@ class LinearSystemHtdTotFixedDT(object):
                                     else:
                                         if positionPref2[-1] > oe2['length']:
                                             positionPref2[-1] = oe2['length']
-                                            for i in range(-1,-1*(len(positionPref2)),-1):
+                                            for i in xrange(-1,-1*(len(positionPref2)),-1):
                                                 if positionPref2[i]-positionPref2[i-1] < oe2['minDist'] + eps:
                                                     positionPref2[i-1]=positionPref2[i] - oe2['minDist']
                                                 else:
@@ -1919,7 +1922,7 @@ class LinearSystemHtdTotFixedDT(object):
                                                     print(posOld)
                                         if positionPref2[0] < 0:
                                             positionPref2[0] = 0
-                                            for i in range(len(positionPref2)-1):
+                                            for i in xrange(len(positionPref2)-1):
                                                 if positionPref2[i+1]-positionPref2[i] < oe2['minDist'] + eps:
                                                     positionPref2[i+1]=positionPref2[i] + oe2['minDist']
                                                 else:
@@ -1932,7 +1935,7 @@ class LinearSystemHtdTotFixedDT(object):
                                     if oe3['sign'] == 1:
                                         if positionPref3[-1] < 0:
                                             positionPref3[-1] = 0
-                                            for i in range(-1,-1*(len(positionPref3)),-1):
+                                            for i in xrange(-1,-1*(len(positionPref3)),-1):
                                                 if positionPref3[i-1]-positionPref3[i] < oe3['minDist'] + eps:
                                                     positionPref3[i-1]=positionPref3[i] + oe3['minDist']
                                                 else:
@@ -1946,7 +1949,7 @@ class LinearSystemHtdTotFixedDT(object):
                                                     print(posOld)
                                         if positionPref3[0] > oe3['length']:
                                             positionPref3[0] = oe3['length']
-                                            for i in range(len(positionPref3)-1):
+                                            for i in xrange(len(positionPref3)-1):
                                                 if positionPref3[i]-positionPref3[i+1] < oe3['minDist'] + eps:
                                                     positionPref3[i+1]=positionPref3[i] - oe3['minDist']
                                                 else:
@@ -1957,7 +1960,7 @@ class LinearSystemHtdTotFixedDT(object):
                                     else:
                                         if positionPref3[-1] > oe3['length']:
                                             positionPref3[-1] = oe3['length']
-                                            for i in range(-1,-1*(len(positionPref3)),-1):
+                                            for i in xrange(-1,-1*(len(positionPref3)),-1):
                                                 if positionPref3[i]-positionPref3[i-1] < oe3['minDist'] + eps:
                                                     positionPref3[i-1]=positionPref3[i] - oe3['minDist']
                                                 else:
@@ -1971,7 +1974,7 @@ class LinearSystemHtdTotFixedDT(object):
                                                     print(posOld)
                                         if positionPref3[0] < 0:
                                             positionPref3[0] = 0
-                                            for i in range(len(positionPref3)-1):
+                                            for i in xrange(len(positionPref3)-1):
                                                 if positionPref3[i+1]-positionPref3[i] < oe3['minDist'] + eps:
                                                     positionPref3[i+1]=positionPref3[i] + oe3['minDist']
                                                 else:
@@ -1998,7 +2001,7 @@ class LinearSystemHtdTotFixedDT(object):
                                 pref2Full=0
                                 pref3Full=0
                                 #Loop over all movable RBCs (begin with RBC which overshot the most)
-                                for i in range(overshootsNo):
+                                for i in xrange(overshootsNo):
                                     index=-1*(i+1) if sign == 1.0 else i
                                     index1=-1*(i+1) if oe['sign'] == 1.0 else i
                                     index2=-1*(i+1) if oe2['sign'] == 1.0 else i
@@ -2842,7 +2845,7 @@ class LinearSystemHtdTotFixedDT(object):
                                     e['rRBC']=e['rRBC'][overshootsNo::]
                         #Deal with RBCs which could not be reassigned to the new edge because of a traffic jam
                         noStuckRBCs=len(bifRBCsIndex)-overshootsNo
-                        for i in range(noStuckRBCs):
+                        for i in xrange(noStuckRBCs):
                             index=-1*(i+1) if sign == 1.0 else i
                             e['rRBC'][index]=e['length']-i*e['minDist'] if sign == 1.0 else 0+i*e['minDist']
                         #Recheck if the distance between the newly introduces RBCs is still big enough 
@@ -2850,7 +2853,7 @@ class LinearSystemHtdTotFixedDT(object):
                             moved = 0
                             count = 0
                             if sign == 1.0:
-                                for i in range(-1,-1*(len(e['rRBC'])),-1):
+                                for i in xrange(-1,-1*(len(e['rRBC'])),-1):
                                     index=i-1
                                     if e['rRBC'][i] < e['rRBC'][index] or abs(e['rRBC'][i]-e['rRBC'][index]) < e['minDist']:
                                         e['rRBC'][index]=e['rRBC'][i]-e['minDist']
@@ -2861,7 +2864,7 @@ class LinearSystemHtdTotFixedDT(object):
                                     if count >= noStuckRBCs and moved == 0:
                                         break
                             else:
-                                for i in range(len(e['rRBC'])-1):
+                                for i in xrange(len(e['rRBC'])-1):
                                     index=i+1
                                     if e['rRBC'][i] > e['rRBC'][index] or abs(e['rRBC'][i]-e['rRBC'][index]) < e['minDist']:
                                         e['rRBC'][index]=e['rRBC'][i]+e['minDist']
@@ -3020,7 +3023,7 @@ class LinearSystemHtdTotFixedDT(object):
                             else:
                                 overshootsNo=int(posNoBifEvents)
                             #position rbcs based on when they appear at bifurcation
-                            for i in range(-1*overshootsNo,0):
+                            for i in xrange(-1*overshootsNo,0):
                                 overshootTime.append(overshootTimes[i][0])
                                 inEdge.append(overshootTimes[i][1])
                             #Numbers of RBCs from corresponding inEdge
@@ -3045,13 +3048,13 @@ class LinearSystemHtdTotFixedDT(object):
                                     position[-1]=oe['length']
                             #Position of the following RBCs is changed, such that they do not overlap
                             allCounts=count1+count2+count3
-                            for i in range(-1,-1*allCounts,-1):
+                            for i in xrange(-1,-1*allCounts,-1):
                                 if position[i]-position[i-1] < oe['minDist'] or \
                                     position[i-1] > position[i]:
                                     position[i-1]=position[i]-oe['minDist']
                             #if first RBC did not yet move enough less than the possible no of RBCs fit into the outEdge
                             allCounts=count1+count2+count3
-                            for i in range(allCounts):
+                            for i in xrange(allCounts):
                                 if position[i] < 0:
                                     if inEdge[i] == 1:
                                         count1 += -1
@@ -3097,7 +3100,7 @@ class LinearSystemHtdTotFixedDT(object):
                         #Deal with RBCs which could not be reassigned to the new edge because of a traffic jam
                         #InEdge 1
                         noStuckRBCs1=len(bifRBCsIndex1)-count1
-                        for i in range(noStuckRBCs1):
+                        for i in xrange(noStuckRBCs1):
                             index=-1*(i+1) if sign == 1.0 else i
                             e['rRBC'][index]=e['length']-i*e['minDist'] if sign == 1.0 else 0+i*e['minDist']
                         #Recheck if the distance between the newly introduces RBCs is still big enough 
@@ -3105,7 +3108,7 @@ class LinearSystemHtdTotFixedDT(object):
                             moved = 0
                             count = 0
                             if sign == 1.0:
-                                for i in range(-1,-1*(len(e['rRBC'])),-1):
+                                for i in xrange(-1,-1*(len(e['rRBC'])),-1):
                                     index=i-1
                                     if e['rRBC'][i] < e['rRBC'][index] or abs(e['rRBC'][i]-e['rRBC'][index]) < e['minDist']:
                                         e['rRBC'][index]=e['rRBC'][i]-e['minDist']
@@ -3116,7 +3119,7 @@ class LinearSystemHtdTotFixedDT(object):
                                     if count >= noStuckRBCs1 and moved == 0:
                                         break
                             else:
-                                for i in range(len(e['rRBC'])-1):
+                                for i in xrange(len(e['rRBC'])-1):
                                     index=i+1
                                     if e['rRBC'][i] > e['rRBC'][index] or abs(e['rRBC'][i]-e['rRBC'][index]) < e['minDist']:
                                         e['rRBC'][index]=e['rRBC'][i]+e['minDist']
@@ -3129,7 +3132,7 @@ class LinearSystemHtdTotFixedDT(object):
                         #Deal with RBCs which could not be reassigned to the new edge because of a traffic jam
                         #InEdge 2
                         noStuckRBCs2=len(bifRBCsIndex2)-count2
-                        for i in range(noStuckRBCs2):
+                        for i in xrange(noStuckRBCs2):
                             index=-1*(i+1) if sign2 == 1.0 else i
                             e2['rRBC'][index]=e2['length']-i*e2['minDist'] if sign2 == 1.0 else 0+i*e2['minDist']
                         #Recheck if the distance between the newly introduces RBCs is still big enough 
@@ -3137,7 +3140,7 @@ class LinearSystemHtdTotFixedDT(object):
                             moved = 0
                             count = 0
                             if sign2 == 1.0:
-                                for i in range(-1,-1*(len(e2['rRBC'])),-1):
+                                for i in xrange(-1,-1*(len(e2['rRBC'])),-1):
                                     index=i-1
                                     if e2['rRBC'][i] < e2['rRBC'][index] or abs(e2['rRBC'][i]-e2['rRBC'][index]) < e2['minDist']:
                                         e2['rRBC'][index]=e2['rRBC'][i]-e2['minDist']
@@ -3148,7 +3151,7 @@ class LinearSystemHtdTotFixedDT(object):
                                     if count >= noStuckRBCs2 and moved == 0:
                                         break
                             else:
-                                for i in range(len(e2['rRBC'])-1):
+                                for i in xrange(len(e2['rRBC'])-1):
                                     index=i+1
                                     if e2['rRBC'][i] > e2['rRBC'][index] or abs(e2['rRBC'][i]-e2['rRBC'][index]) < e2['minDist']:
                                         e2['rRBC'][index]=e2['rRBC'][i]+e2['minDist']
@@ -3162,7 +3165,7 @@ class LinearSystemHtdTotFixedDT(object):
                         #InEdge 3
                         if boolTrifurcation:
                             noStuckRBCs3=len(bifRBCsIndex3)-count3
-                            for i in range(noStuckRBCs3):
+                            for i in xrange(noStuckRBCs3):
                                 index=-1*(i+1) if sign3 == 1.0 else i
                                 e3['rRBC'][index]=e3['length']-i*e3['minDist'] if sign3 == 1.0 else 0+i*e3['minDist']
                             #Recheck if the distance between the newly introduces RBCs is still big enough 
@@ -3170,7 +3173,7 @@ class LinearSystemHtdTotFixedDT(object):
                                 moved = 0
                                 count = 0
                                 if sign3 == 1.0:
-                                    for i in range(-1,-1*(len(e3['rRBC'])),-1):
+                                    for i in xrange(-1,-1*(len(e3['rRBC'])),-1):
                                         index=i-1
                                         if e3['rRBC'][i] < e3['rRBC'][index] or abs(e3['rRBC'][i]-e3['rRBC'][index]) < e3['minDist']:
                                             e3['rRBC'][index]=e3['rRBC'][i]-e3['minDist']
@@ -3181,7 +3184,7 @@ class LinearSystemHtdTotFixedDT(object):
                                         if count >= noStuckRBCs3 and moved == 0:
                                             break
                                 else:
-                                    for i in range(len(e3['rRBC'])-1):
+                                    for i in xrange(len(e3['rRBC'])-1):
                                         index=i+1
                                         if e3['rRBC'][i] > e3['rRBC'][index] or abs(e3['rRBC'][i]-e3['rRBC'][index]) < e3['minDist']:
                                             e3['rRBC'][index]=e3['rRBC'][i]+e3['minDist']
@@ -3260,17 +3263,18 @@ class LinearSystemHtdTotFixedDT(object):
                         else:
                             distToFirst2=oe2['length']
                         #Check how many RBCs are allowed by nMax
-                        posNoBifEventsPref=np.floor(distToFirst/oe['minDist'])
+                        posNoBifEventsPref=int(np.floor(distToFirst/oe['minDist']))
                         if posNoBifEventsPref + len(oe['rRBC']) > oe['nMax']:
                             posNoBifEventsPref = oe['nMax'] - len(oe['rRBC'])
-                        posNoBifEventsPref2=np.floor(distToFirst2/oe2['minDist'])
+                        posNoBifEventsPref2=int(np.floor(distToFirst2/oe2['minDist']))
                         if posNoBifEventsPref2 + len(oe2['rRBC']) > oe2['nMax']:
                             posNoBifEventsPref2 = oe2['nMax'] - len(oe2['rRBC'])
                         #Check how many RBCs fit into the new Vessel
                         posNoBifEvents=int(posNoBifEventsPref+posNoBifEventsPref2)
                         noBifEvents = noBifEvents1 + noBifEvents2
+                        overshootsNo=noBifEvents
                         if nonCap:
-                            if ratio1 != 0:
+                            if ratio1 != 0 and overshootsNo != 0:
                                 def errorDistributeRBCs(n1):
                                     return n1/float(overshootsNo)-ratio1
                                 resultMinimizeError = root(errorDistributeRBCs,np.ceil(ratio1 * overshootsNo))
@@ -3333,7 +3337,7 @@ class LinearSystemHtdTotFixedDT(object):
                                 overshootsNo=int(len(overshootTimes))
                             else:
                                 overshootsNo=int(posNoBifEvents)
-                            for i in range(-1*overshootsNo,0):
+                            for i in xrange(-1*overshootsNo,0):
                                 overshootTime.append(overshootTimes[i][0])
                                 inEdge.append(overshootTimes[i][1])
                             if oe['sign'] == 1.0:
@@ -3358,7 +3362,7 @@ class LinearSystemHtdTotFixedDT(object):
                                 positionPref2=[]
                                 positionPref1=[]
                                 last=2
-                                for i in range(overshootsNo):
+                                for i in xrange(overshootsNo):
                                     index=-1*(i+1)
                                     index1=-1*(i+1) if oe['sign'] == 1.0 else i
                                     index2=-1*(i+1) if oe2['sign'] == 1.0 else i
@@ -3526,7 +3530,7 @@ class LinearSystemHtdTotFixedDT(object):
                                     if oe['sign'] == 1:
                                         if positionPref1[-1] < 0:
                                             positionPref1[-1] = 0
-                                            for i in range(-1,-1*(len(positionPref1)),-1):
+                                            for i in xrange(-1,-1*(len(positionPref1)),-1):
                                                 if positionPref1[i-1]-positionPref1[i] < oe['minDist'] - eps:
                                                     positionPref1[i-1]=positionPref1[i] + oe['minDist']
                                                 else:
@@ -3538,7 +3542,7 @@ class LinearSystemHtdTotFixedDT(object):
                                                     print(oe['rRBC'][0])
                                         if positionPref1[0] > oe['length']:
                                             positionPref1[0] = oe['length']
-                                            for i in range(len(positionPref1)-1):
+                                            for i in xrange(len(positionPref1)-1):
                                                 if positionPref1[i]-positionPref1[i+1] < oe['minDist'] - eps:
                                                     positionPref1[i+1]=positionPref1[i] - oe['minDist']
                                                 else:
@@ -3549,7 +3553,7 @@ class LinearSystemHtdTotFixedDT(object):
                                     else:
                                         if positionPref1[-1] > oe['length']:
                                             positionPref1[-1] = oe['length']
-                                            for i in range(-1,-1*(len(positionPref1)),-1):
+                                            for i in xrange(-1,-1*(len(positionPref1)),-1):
                                                 if positionPref1[i]-positionPref1[i-1] < oe['minDist'] + eps:
                                                     positionPref1[i-1]=positionPref1[i] - oe['minDist']
                                                 else:
@@ -3561,7 +3565,7 @@ class LinearSystemHtdTotFixedDT(object):
                                                     print(oe['rRBC'][-1])
                                         if positionPref1[0] < 0:
                                             positionPref1[0] = 0
-                                            for i in range(len(positionPref1)-1):
+                                            for i in xrange(len(positionPref1)-1):
                                                 if positionPref1[i+1]-positionPref1[i] < oe['minDist'] + eps:
                                                     positionPref1[i+1]=positionPref1[i] + oe['minDist']
                                                 else:
@@ -3574,7 +3578,7 @@ class LinearSystemHtdTotFixedDT(object):
                                     if oe2['sign'] == 1:
                                         if positionPref2[-1] < 0:
                                             positionPref2[-1] = 0
-                                            for i in range(-1,-1*(len(positionPref2)),-1):
+                                            for i in xrange(-1,-1*(len(positionPref2)),-1):
                                                 if positionPref2[i-1]-positionPref2[i] < oe2['minDist'] + eps:
                                                     positionPref2[i-1]=positionPref2[i] + oe2['minDist']
                                                 else:
@@ -3586,7 +3590,7 @@ class LinearSystemHtdTotFixedDT(object):
                                                     print(oe2['rRBC'][0])
                                         if positionPref2[0] > oe2['length']:
                                             positionPref2[0] = oe2['length']
-                                            for i in range(len(positionPref2)-1):
+                                            for i in xrange(len(positionPref2)-1):
                                                 if positionPref2[i]-positionPref2[i+1] < oe2['minDist'] + eps:
                                                     positionPref2[i+1]=positionPref2[i] - oe2['minDist']
                                                 else:
@@ -3597,7 +3601,7 @@ class LinearSystemHtdTotFixedDT(object):
                                     else:
                                         if positionPref2[-1] > oe2['length']:
                                             positionPref2[-1] = oe2['length']
-                                            for i in range(-1,-1*(len(positionPref2)),-1):
+                                            for i in xrange(-1,-1*(len(positionPref2)),-1):
                                                 if positionPref2[i]-positionPref2[i-1] < oe2['minDist'] + eps:
                                                     positionPref2[i-1]=positionPref2[i] - oe2['minDist']
                                             if len(oe2['rRBC']) > 0:
@@ -3607,7 +3611,7 @@ class LinearSystemHtdTotFixedDT(object):
                                                     print(oe2['rRBC'][-1])
                                         if positionPref2[0] < 0:
                                             positionPref2[0] = 0
-                                            for i in range(len(positionPref2)-1):
+                                            for i in xrange(len(positionPref2)-1):
                                                 if positionPref2[i+1]-positionPref2[i] < oe2['minDist'] + eps:
                                                     positionPref2[i+1]=positionPref2[i] + oe2['minDist']
                                                 else:
@@ -3636,7 +3640,7 @@ class LinearSystemHtdTotFixedDT(object):
 		                count1 = 0
 		                count2 = 0
                                 #Loop over all movable RBCs
-                                for i in range(overshootsNo):
+                                for i in xrange(overshootsNo):
                                     index=-1*(i+1)
                                     index1=-1*(i+1) if oe['sign'] == 1.0 else i
                                     index2=-1*(i+1) if oe2['sign'] == 1.0 else i
@@ -3960,7 +3964,7 @@ class LinearSystemHtdTotFixedDT(object):
                         #Deal with RBCs which could not be reassigned to the new edge because of a traffic jam
                         #InEdge 1
                         noStuckRBCs1=len(bifRBCsIndex1)-count1
-                        for i in range(noStuckRBCs1):
+                        for i in xrange(noStuckRBCs1):
                             index=-1*(i+1) if sign == 1.0 else i
                             e['rRBC'][index]=e['length']-i*e['minDist'] if sign == 1.0 else 0+i*e['minDist']
                         #Recheck if the distance between the newly introduces RBCs is still big enough 
@@ -3968,7 +3972,7 @@ class LinearSystemHtdTotFixedDT(object):
                             moved = 0
                             if sign == 1.0:
                                 count = 0
-                                for i in range(-1,-1*(len(e['rRBC'])),-1):
+                                for i in xrange(-1,-1*(len(e['rRBC'])),-1):
                                     index=i-1
                                     if e['rRBC'][i] < e['rRBC'][index] or abs(e['rRBC'][i]-e['rRBC'][index]) < e['minDist']:
                                         e['rRBC'][index]=e['rRBC'][i]-e['minDist']
@@ -3980,7 +3984,7 @@ class LinearSystemHtdTotFixedDT(object):
                                         break
                             else:
                                 count = 0
-                                for i in range(len(e['rRBC'])-1):
+                                for i in xrange(len(e['rRBC'])-1):
                                     index=i+1
                                     if e['rRBC'][i] > e['rRBC'][index] or abs(e['rRBC'][i]-e['rRBC'][index]) < e['minDist']:
                                         e['rRBC'][index]=e['rRBC'][i]+e['minDist']
@@ -3994,7 +3998,7 @@ class LinearSystemHtdTotFixedDT(object):
                         #InEdge 2
                         if noBifEvents2 > 0:
                             noStuckRBCs2=len(bifRBCsIndex2)-count2
-                            for i in range(noStuckRBCs2):
+                            for i in xrange(noStuckRBCs2):
                                 index=[-1*(i+1) if sign2 == 1.0 else i]
                                 e2['rRBC'][index]=[e2['length']-i*e2['minDist'] if sign2 == 1.0 else 0+i*e2['minDist']]
                             #Recheck if the distance between the newly introduces RBCs is still big enough 
@@ -4002,7 +4006,7 @@ class LinearSystemHtdTotFixedDT(object):
                                 moved = 0
                                 if sign2 == 1.0:
                                     count = 0
-                                    for i in range(-1,-1*(len(e2['rRBC'])),-1):
+                                    for i in xrange(-1,-1*(len(e2['rRBC'])),-1):
                                         index=i-1
                                         if e2['rRBC'][i] < e2['rRBC'][index] or abs(e2['rRBC'][i]-e2['rRBC'][index]) < e2['minDist']:
                                             e2['rRBC'][index]=e2['rRBC'][i]-e2['minDist']
@@ -4014,7 +4018,7 @@ class LinearSystemHtdTotFixedDT(object):
                                             break
                                 else:
                                     count = 0
-                                    for i in range(len(e2['rRBC'])-1):
+                                    for i in xrange(len(e2['rRBC'])-1):
                                         index=i+1
                                         if e2['rRBC'][i] > e2['rRBC'][index] or abs(e2['rRBC'][i]-e2['rRBC'][index]) < e2['minDist']:
                                             e2['rRBC'][index]=e2['rRBC'][i]+e2['minDist']
@@ -4338,18 +4342,11 @@ class LinearSystemHtdTotFixedDT(object):
                             print(G.vs[vi]['vType'])
                             print(G.vs[vi]['inflowE'])
                             print(G.vs[vi]['outflowE'])
-                            print(boolHttEdge)
-                            print(rRBC)
-                            print(boolHttEdge2)
-                            print(rRBC2)
-                            print(boolHttEdge3)
-                            print(rRBC3)
-                            print(G.vs[vi]['av'])
                             print(noBifEvents)
                             print('Pressures')
                             print(edge.tuple)
                             print(G.vs[edge.tuple]['pressure'])
-                    for j in range(len(edge['rRBC'])-1):
+                    for j in xrange(len(edge['rRBC'])-1):
                         if edge['rRBC'][j] > edge['rRBC'][j+1] or edge['rRBC'][j+1]-edge['rRBC'][j] < edge['minDist']-100*eps:
                             print('BIGERROR BEGINNING END 3')
                             print('edgesInvolved')
@@ -4582,10 +4579,8 @@ class LinearSystemHtdTotFixedDT(object):
         t1 = ttime.time()
         if init:
             self._t = 0.0
-            BackUpTStart=0.1*time
-            #BackUpTStart=time/30
-            BackUpT=0.1*time
-            #BackUpT=time/30.
+            BackUpTStart=0.025*time
+            BackUpT=0.025*time
             BackUpCounter=0
         else:
             if 'dtFinal' not in G.attributes():
@@ -4596,9 +4591,7 @@ class LinearSystemHtdTotFixedDT(object):
                 G['iterFinalSample'] = 0
             self._t = G['dtFinal']
             self._tSample=G['iterFinalSample']
-            BackUpT=0.1*time
-            #BackUpT=time/65.
-            #BackUpT=0.05*time
+            BackUpT=0.025*time
             print('Simulation starts at')
             print(self._t)
             print('First BackUp should be done at')
@@ -4963,11 +4956,11 @@ class LinearSystemHtdTotFixedDT(object):
              ml = rootnode_solver(A, smooth=('energy', {'degree':2}), strength='evolution' )
              M = ml.aspreconditioner(cycle='V')
              # Solve pressure system
-             #x,info = gmres(A, self._b, tol=self._eps, maxiter=50, M=M, x0=self._x)
-             #x,info = gmres(A, self._b, tol=self._eps/10000000000000, maxiter=50, M=M)
-             x,info = gmres(A, self._b, tol=self._eps/10000, maxiter=50, M=M)
+             #x,info = gmres(A, self._b, tol=self._eps/10000, maxiter=50, M=M)
+             x,info = gmres(A, self._b, tol=self._eps/1000000, maxiter=100, M=M)
              if info != 0:
                  print('SOLVEERROR in Solving the Matrix')
+                 print(info)
              test = A * x
              res = np.array(test)-np.array(self._b)
         self._x = x
@@ -4986,7 +4979,7 @@ class LinearSystemHtdTotFixedDT(object):
                                                     G.vs[n]['pressure'])
                                for e, n in zip(G.adjacent(v), G.neighbors(v))])
                            for v in xrange(G.vcount())]
-        for i in range(G.vcount()):
+        for i in xrange(G.vcount()):
             if G.vs[i]['flowSum'] > 5e-4 and i not in G['av'] and i not in G['vv']:
                 print('')
                 print(i)

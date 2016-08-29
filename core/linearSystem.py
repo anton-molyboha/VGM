@@ -74,6 +74,9 @@ class LinearSystem(object):
             if 'htt' not in G.es.attribute_names():
                 G.es['htt']=[self._withRBC]*G.ecount()
                 self._withRBC = 1
+            httNone = G.es(htt_eq=None).indices
+            if len(httNone) > 0:
+                G.es[httNone]['htt']=[self._withRBC]*len(httNone)
 
         self.update(G)
         self._eps = np.finfo(float).eps
@@ -129,8 +132,6 @@ class LinearSystem(object):
             G.es['effResistance'] =[ res * nurel(max(4.0,d),min(dHt,0.6),self._invivo) for res,dHt,d in zip(G.es['resistance'], \
                 dischargeHt,G.es['diameter'])]
             G.es['conductance']=1/np.array(G.es['effResistance'])
-            print('Conductance')
-            print(np.sum(G.es['conductance']))
         else: 
 	    # Compute conductance
             for e in G.es:

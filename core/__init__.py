@@ -18,6 +18,8 @@ from linearSystem_htd_TotFixedDT_StempRBCs import *
 from linearSystem_htd_TotFixedDT_StempRBCs_AvgBox import *
 from linearSystem_htd_TotFixedDT_nRBCint import *
 from linearSystem_htd_optimize import *
+from preprocessingKleinfeldNW import *
+from hierarchicalApproach import *
 
 import dilation_and_splits
 import g_input
@@ -39,3 +41,5 @@ import linearSystem_htd_TotFixedDT_StempRBCs
 import linearSystem_htd_TotFixedDT_StempRBCs_AvgBox
 import linearSystem_htd_TotFixedDT_nRBCint
 import linearSystem_htd_optimize
+import preprocessingKleinfeldNW
+import hierarchicalApproach

@@ -141,10 +141,21 @@ class VascularGraph(Graph):
             target = [target]
         for attribute in G.es.attribute_names():
             self.es[target][attribute] = deepcopy(G.es[source][attribute])
+        boolLengths2=0
+        if 'lengths2' in  self.es.attribute_names():
+            boolLengths2=1
         if assertPoints:
-            self.es[target]['points'] = [e['points'][::-1]
-                    if any(e['points'][0] != self.vs[e.source]['r'])
-                    else e['points'] for e in self.es[target]]
+            for e in self.es[target]:
+                if any(e['points'][0] != self.vs[e.source]['r']):
+                    e['points']=e['points'][::-1]
+                    e['diameters']=e['diameters'][::-1]
+                    e['lengths']=e['lengths'][::-1]
+                    if boolLengths2:
+                        e['diameters2']=e['diameters2'][::-1]
+                        e['lengths2']=e['lengths2'][::-1]
+            #self.es[target]['points'] = [e['points'][::-1]
+            #        if any(e['points'][0] != self.vs[e.source]['r'])
+            #        else e['points'] for e in self.es[target]]
 #            if attribute == 'points' and assertPoints:
 #                for s,t in zip(source, target):
 #                    points = deepcopy(G.es[s][attribute])
@@ -177,6 +188,7 @@ class VascularGraph(Graph):
                      random vertex is chosen
         OUTPUT: None, the VascularGraph is modified in-place.
         """
+
         Kdt = kdtree.KDTree(self.vs['r'], leafsize=10)
         vStartingIndex = self.vcount()
         eStartingIndex = self.ecount()
@@ -189,6 +201,8 @@ class VascularGraph(Graph):
         self.copy_edge_attributes(xrange(other.ecount()),
                                   xrange(eStartingIndex, self.ecount()), 
                                   other, assertPoints)
+
+
         #distance of the newly added vertices to the closest node of the old graph and the vertex number of the vertex in the old graph
         if kind =='n':
             distances, vertices = Kdt.query(self.vs(xrange(vStartingIndex, 
@@ -759,6 +773,7 @@ class VascularGraph(Graph):
                               split instead.
         OUTPUT: None
         """
+        eps = finfo(float).eps * 1e4
         newVertex = self.vcount()
         source = self.es[eIndex].source
         target = self.es[eIndex].target
@@ -770,7 +785,7 @@ class VascularGraph(Graph):
 
         if 'points' not in self.es.attribute_names():
             self.add_points(self.es['length'][eIndex]/3.,edgeList=[eIndex])
-        elif self.es['points'] == None:
+        elif self.es['points'][eIndex] == None:
             self.add_points(self.es['length'][eIndex]/3.,edgeList=[eIndex])
 
         #Calculate relDistance for points
@@ -778,6 +793,7 @@ class VascularGraph(Graph):
         lengthSum=0
         smallerBool=0
         largerBool=0
+        noNewPointNeededBool=0
         index=0
         posNewVert=self.es[eIndex]['length']*relDist
         for i in range(len(self.es[eIndex]['lengths2'])):
@@ -789,7 +805,13 @@ class VascularGraph(Graph):
                 smallerBool = 1 
             elif relDistCurrent < relDist and i == len(self.es[eIndex]['lengths2'])-2:
                 largerBool = 1
-            if relDistCurrent > relDist and index == 0:
+            if np.abs(relDistCurrent - relDist) < eps and index == 0:
+                noNewPointNeededBool=1
+                index = i
+                coordsNewVertex=self.es['points'][eIndex][i+1]
+                self.vs[newVertex]['r'] = coordsNewVertex
+                break
+            elif relDistCurrent > relDist and index == 0:
                 index = i
                 vect=self.es[eIndex]['points'][i+1]-self.es[eIndex]['points'][i]
                 diff = posNewVert-(lengthSum-self.es[eIndex]['lengths2'][i])
@@ -847,7 +869,7 @@ class VascularGraph(Graph):
             pointsNew.append(points[-1])
             diametersNew.append(diameters[-1])
 
-        if smallerBool == 0 and largerBool == 0:
+        if smallerBool == 0 and largerBool == 0 and noNewPointNeededBool==0:
             pointsNew=[]
             diametersNew=[]
             points=self.es[eIndex]['points']
@@ -867,6 +889,11 @@ class VascularGraph(Graph):
             for i in range(index+1,len(points)):
                 pointsNew.append(points[i])
                 diametersNew.append(diameters[i])
+        elif smallerBool == 0 and largerBool == 0 and noNewPointNeededBool==1:
+            pointsNew=self.es[eIndex]['points']
+            diametersNew=self.es[eIndex]['diameters']
+            if pressureBool:
+                pressurenewVertex=self.vs['pressure'][source]+(self.vs['pressure'][target]-self.vs['pressure'][source])*relDist
 
         #List of all points and diameters, the new vertex has been introduced as a point in the list, still for the whole edge
         self.es[eIndex]['points']=pointsNew
@@ -897,6 +924,7 @@ class VascularGraph(Graph):
                 lengths.append(self.es[newEdges[0]]['lengths2'][j-1]/2.)
             else:
                  lengths.append(0.5*self.es[newEdges[0]]['lengths2'][j]+0.5*self.es[newEdges[0]]['lengths2'][j-1])
+        self.es[newEdges[0]]['lengths']=lengths
         diameters2=[]
         resistances=[]
         for j in range(len(self.es[newEdges[0]]['points'])-1):
@@ -910,7 +938,6 @@ class VascularGraph(Graph):
         self.es[newEdges[0]]['effDiam']=(self.es[newEdges[0]]['length']/resistanceTot)**(0.25)
         self.es[newEdges[0]]['diameter']=self.es[newEdges[0]]['effDiam']
         self.es[newEdges[0]]['diameters2']=diameters2
-
 
         #deal with second newEdge
         self.es[newEdges[1]]['diameters'] = self.es[eIndex]['diameters'][pIndex:][::-1]
@@ -943,6 +970,7 @@ class VascularGraph(Graph):
                 lengths.append(self.es[newEdges[1]]['lengths2'][j-1]/2.)
             else:
                  lengths.append(0.5*self.es[newEdges[1]]['lengths2'][j]+0.5*self.es[newEdges[1]]['lengths2'][j-1])
+        self.es[newEdges[1]]['lengths']=lengths
 
         #Deal with RBCs if present
         if 'rRBC' in self.es.attribute_names():
@@ -968,7 +996,7 @@ class VascularGraph(Graph):
 
         attr = self.es.attribute_names()
         for a in attr:
-            if a not in ('length', 'lengths', 'diameter', 'diameters', 'points','nRBC','nRBC_avg','rRBC','lengths2','diameters2'):
+            if a not in ('length', 'lengths', 'diameter', 'diameters', 'points','nRBC','nRBC_avg','rRBC','lengths2','diameters2',''):
                 self.es[newEdges[0]][a] = self.es[eIndex][a]
                 self.es[newEdges[1]][a] = self.es[eIndex][a]
 
@@ -976,7 +1004,6 @@ class VascularGraph(Graph):
         for a in attr:
             if a not in ('r','pBC','rBC','av','vv','kind','nkind','pressure'):
                 self.vs[newVertex][a] = self.vs[source][a]
-
 
         if deleteOldEdge:
             self.delete_edges(eIndex)        
@@ -987,7 +1014,7 @@ class VascularGraph(Graph):
         """Joins edges adjacent to an order two vertex.
         Note that this code is designed to work for VascularGraphs imported 
         from AmiraMesh files (i.e. 'diameter', 'diameters', 'length', 'lengths', 
-        and 'points' are the only edge properties expected).
+        'points','lengths2','diameters2','kind' and 'nkind' are the only edge properties expected).
         INPUT: orderTwoVertex: The index of the order two vertex.
                assertOrder: Boolean determining whether to assert that the
                             vertex in question is indeed of order 2.
@@ -1021,11 +1048,49 @@ class VascularGraph(Graph):
                     data.extend(self.es[adjacent[1]][property])
                 self.es[newEdge][property] = np.array(data)
 
-            self.es[newEdge]['diameter'] = np.sqrt(np.average(
-                                          self.es[newEdge]['diameters']**2.0,
-                                          weights=self.es[newEdge]['lengths']))
-        if 'length' in self.es.attribute_names():
-            self.es[newEdge]['length'] = sum(self.es[adjacent]['length'])
+        if 'diameters2' in self.es.attribute_names() and \
+           'lengths2' in self.es.attribute_names():
+            properties = ['diameters2', 'lengths2']
+            for property in properties:
+                data = []
+                data.extend(self.es[adjacent[0]][property])
+                if neighbors[0] > orderTwoVertex:
+                    data = data[::-1]
+                if neighbors[1] < orderTwoVertex:
+                    data.extend(self.es[adjacent[1]][property][::-1])
+                else:
+                    data.extend(self.es[adjacent[1]][property])
+                self.es[newEdge][property] = np.array(data)
+
+        self.es[newEdge]['length'] = np.sum(self.es[newEdge]['lengths2'])
+        resistanceTotSimplified=np.sum(np.array(self.es[newEdge]['lengths2'])/(np.array(self.es[newEdge]['diameters2'])**4))
+        self.es[newEdge]['diameter']=(self.es[newEdge]['length']/resistanceTotSimplified)**(0.25)
+        if 'nkind' in self.es.attribute_names():
+            nkinds=self.es[adjacent]['nkind']
+            if len(np.unique(nkinds)) > 1:
+                print('WARNING different vessel types are combined')
+                print(nkinds)
+                if 2 in nkinds:
+                    nkinds.remove(2)
+                    self.es[newEdge]['nkind']=nkinds[0]
+                elif 3 in nkinds:
+                    nkinds.remove(3)
+                    self.es[newEdge]['nkind']=nkinds[0]
+                elif 0 in nkinds:
+                    nkinds.remove(0)
+                    self.es[newEdge]['nkind']=nkinds[0]
+                elif 1 in nkinds:
+                    nkinds.remove(1)
+                    self.es[newEdge]['nkind']=nkinds[0]
+                elif 5 in nkinds:
+                    nkinds.remove(5)
+                    self.es[newEdge]['nkind']=nkinds[0]
+            else:
+                self.es[newEdge]['nkind']=nkinds[0]
+        
+        mapNkindToKind={0:'pa',1:'pv',2:'a',3:'v',4:'c',5:'n'}
+        self.es[newEdge]['kind']=mapNkindToKind[self.es[newEdge]['nkind']]
+
         self.delete_vertices(orderTwoVertex)                      
         
     #--------------------------------------------------------------------------                                                   
@@ -1991,7 +2056,7 @@ class VascularGraph(Graph):
                     #G.es[j]['borderEdges']=1
                     self.es[j]['borderEdges']=1
 
-        for i in range(self.ecount()):
+        for i in range(sielf.ecount()):
         #for i in range(G.ecount()):
             relDistList[i].append(1)
             absDistList[i].append(1)
@@ -2019,9 +2084,7 @@ class VascularGraph(Graph):
         noFlowE=[]
         vertices=[]
         count=0
-        print('In update out and inflows')
         if not 'sign' in G.es.attributes() or not 'signOld' in G.es.attributes():
-            print('Initial vType Update')
             for v in G.vs:
                 vI=v.index
                 outE=[]
@@ -2101,22 +2164,20 @@ class VascularGraph(Graph):
                         print(vI)
                 else:
                     for i in G.adjacent(vI):
-                        if G.es['flow'][i] > 5.0e-08:
-                            print('FLOWERROR')
-                            print(vI)
-                            print(inE)
-                            print(outE)
-                            print(noFlowE)
-                            print(i)
-                            print('Flow and diameter')
-                            print(G.es['flow'][i])
-                            print(G.es['diameter'][i])
+                        #if G.es['flow'][i] > 5.0e-08:
+                        #    print('FLOWERROR')
+                        #    print(vI)
+                        #    print(inE)
+                        #    print(outE)
+                        #    print(noFlowE)
+                        #    print(i)
+                        #    print('Flow and diameter')
+                        #    print(G.es['flow'][i])
+                        #    print(G.es['diameter'][i])
                         noFlowE.append(i)
                     inE=[]
                     outE=[]
                     noFlowV.append(vI)
-                    print('noFlow V')
-                    print(vI)
                 inEdges.append(inE)
                 outEdges.append(outE)
             G.vs['inflowE']=inEdges
@@ -2130,7 +2191,6 @@ class VascularGraph(Graph):
             G['connectV']=connectingV
             G['dConnectV']=doubleConnectingV
             G['noFlowV']=noFlowV
-            print('assign vertex types')
             #vertex type av = 1, vv = 2,divV = 3, conV = 4, connectV = 5, dConnectV = 6, noFlowV = 7
             G.vs['vType']=[0]*G.vcount()
             G['av']=G.vs(av_eq=1).indices
@@ -2156,10 +2216,10 @@ class VascularGraph(Graph):
             del(G['conV'])
             del(G['connectV'])
             del(G['dConnectV'])
+            print('Number of noFlow vertices')
+            print(len(noFlowV))
         #Every Time Step
         else:
-            print('Vtype reupdated')
-            print('Update_Out_and_inflows')
             if G.es['sign']!=G.es['signOld']:
                 sign=np.array(G.es['sign'])
                 signOld=np.array(G.es['signOld'])
@@ -2301,21 +2361,23 @@ class VascularGraph(Graph):
                         else:
                             noFlowEdges=[]
                             for i in G.adjacent(vI):
-                                if G.es['flow'][i] > 5.0e-08:
-                                    print('FLOWERROR')
-                                    print(vI)
-                                    print(inE)
-                                    print(outE)
-                                    print(noFlowE)
-                                    print(i)
-                                    print('Flow and diameter')
-                                    print(G.es['flow'][i])
-                                    print(G.es['diameter'][i])
+                                #if G.es['flow'][i] > 5.0e-08:
+                                #    print('FLOWERROR')
+                                #    print(vI)
+                                #    print(inE)
+                                #    print(outE)
+                                #    print(noFlowE)
+                                #    print(i)
+                                #    print('Flow and diameter')
+                                #    print(G.es['flow'][i])
+                                #    print(G.es['diameter'][i])
                                 noFlowEdges.append(i)
                             G.vs[vI]['vType']=7
                             G.es[noFlowEdges]['noFlow']=[1]*len(noFlowEdges)
                             G.vs[vI]['inflowE']=[]
                             G.vs[vI]['outflowE']=[]
+            print('Number of noFlow vertices')
+            print(len(noFlowV))
 
             G['av']=G.vs(av_eq=1).indices
             G['vv']=G.vs(vv_eq=1).indices
@@ -2513,4 +2575,257 @@ class VascularGraph(Graph):
                                 self.vs[i]['orderBasicCap']=n
             if boolInEdgesPresent == 0:
                 break
+
+    #--------------------------------------------------------------------------
+    
+    def create_tortuous_structure(self,nkindKey=0,surfPlunKey=0):
+        """Turns a graph which consists of individual data point into a graph with 
+        the commonly used tortuous data structure, meaning the graph only consists of
+        degree 3 and degree 4 vertices and the edge attributes 'points','diameters',
+        'diameters2','lengths' and 'lengths2' are created.
+        INPUT: graph itself.
+               nkindKey: edge attribute which represents nkind (for kleinfeld NW 'labelAV'). works for up
+                       to three different kinds per edge. if different nkinds per merged edge are found, the
+                       one with the highest occurence is assigned. If similiar occurences are found the nkind
+                       with the lower interger is assigned
+               labelSurfPlunKey: edge attribute to differntiate between surface and plunging vessles specific
+                                 for the kleinfeld NW, in Kleinfeld NW 'labelSurfPlun'
+        OUTPUT: graph iteself is changed.
+        """
+        if nkindKey == 0:
+            boolNkind=0
+        else:
+            boolNkind=1
+
+        if surfPlunKey == 0:
+            boolSurfPlun=0
+        else:
+            boolSurfPlun=1
+
+        eps = finfo(float).eps*1000
+        self.vs['degree']=self.degree()
+
+        deg3=self.vs(degree_eq=3).indices
+        deg4=self.vs(degree_eq=4).indices
+        degs=deg3+deg4
+        degs.sort()
+        delVertices=[]
+        self.es['points']=[None]*self.ecount()
+        self.es['diameters']=[None]*self.ecount()
+        self.es['lengths']=[None]*self.ecount()
+        self.es['diameters2']=[None]*self.ecount()
+        self.es['lengths2']=[None]*self.ecount()
+        incidents=[]
+        neighbors=[]
+        for i in range(self.vcount()):
+            incidents.append(self.incident(i))
+            neighbors.append(self.neighbors(i))
+
+        self.vs['incidents']=incidents
+        self.vs['neighbors']=neighbors
+        doneVertex=[]
+        print('Vertices to analyze')
+        print(len(degs))
+        degs=self.vs(degs)
+        count=0
+        for i in degs:
+            stdout.flush()
+            count+= 1
+            neighbors=i['neighbors']
+            incidents=i['incidents']
+            for k,j in zip(neighbors,incidents):
+                incidentStart=j
+                points=[]
+                diams=[]
+                lengths=[]
+                diams2=[]
+                lengths2=[]
+                kinds=[]
+                surfPlun=[]
+                diams.append(np.mean(self.es[i['incidents']]['diameter']))
+                points.append(i['r'])
+                if boolNkind:
+                    kinds.append(i[nkindKey])
+                if k not in doneVertex:
+                   vert=self.vs[k]
+                   edge=self.es[j]
+                   if vert['degree']==2:
+                       boolDeg2=1
+                       lengths.append(0.5*edge['length'])
+                       diams.append(np.mean(self.es[vert['incidents']]['diameter']))
+                       diams2.append(edge['diameter'])
+                       lengths.append(0.5*np.sum(self.es[vert['incidents']]['length']))
+                       lengths2.append(edge['length'])
+                       if boolNkind:
+                           kinds.append(vert[nkindKey])
+                       if boolSurfPlun:
+                           surfPlun.append(vert[surfPlunKey])
+                       points.append(vert['r'])
+                       lastVertex=i.index
+                       delVertices.append(k)
+                       noDeg2Edge=0
+                   else:
+                       boolDeg2=0
+                       noDeg2Edge=1
+                   m=k
+                   while boolDeg2:
+                       vert=self.vs[m]
+                       if vert['degree'] == 2:
+                           neighbors2 = vert['neighbors']
+                           incidents2 = vert['incidents']
+                           for k2,j2 in zip(neighbors2,incidents2):
+                                if k2 != lastVertex:
+                                    edge=self.es[j2]
+                                    vert=self.vs[k2]
+                                    diams.append(np.mean(self.es[vert['incidents']]['diameter']))
+                                    diams2.append(edge['diameter'])
+                                    lengths.append(0.5*np.sum(self.es[vert['incidents']]['length']))
+                                    lengths2.append(edge['length'])
+                                    points.append(vert['r'])
+                                    if boolNkind:
+                                        kinds.append(vert[nkindKey])
+                                    if boolSurfPlun:
+                                        surfPlun.append(vert[surfPlunKey])
+                                    lastVertex=m
+                                    delVertices.append(m)
+                                    mOld=m
+                                    m=k2
+                                    break
+                       else:
+                           lengths=lengths[:-1]
+                           lengths.append(0.5*edge['length'])
+                           if len(diams) != len(diams2) + 1:
+                               print('ERROR len diams')
+                               print(i)
+                           if np.abs(np.sum(lengths)-np.sum(lengths2)) > eps:
+                               print('ERROR lengths')
+                               print(i)
+                               print(np.sum(lengths))
+                               print(np.sum(lengths2))
+                           if len(lengths) != len(lengths2) + 1:
+                               print('ERROR len lengths')
+                               print(i)
+                           boolDeg2=0
+                   if not noDeg2Edge:
+                       self.add_edge(i,k2)
+                       doneVertex.append(mOld)
+                       stdout.flush()
+                       if i.index > k2:
+                           self.es[self.ecount()-1]['points']=np.array(points[::-1])
+                           self.es[self.ecount()-1]['diameters']=np.array(diams[::-1])
+                           self.es[self.ecount()-1]['diameters2']=np.array(diams2[::-1])
+                           self.es[self.ecount()-1]['lengths']=np.array(lengths[::-1])
+                           self.es[self.ecount()-1]['length']=np.sum(lengths[::-1])
+                           self.es[self.ecount()-1]['lengths2']=np.array(lengths2[::-1])
+                           self.es[self.ecount()-1]['diameter']=np.mean(diams[::-1])
+                           self.es[self.ecount()-1]['endSeg']=self.es[incidentStart]['indexOrig']
+                           self.es[self.ecount()-1]['startSeg']=self.es[j]['indexOrig']
+                       else:
+                           self.es[self.ecount()-1]['points']=np.array(points)
+                           self.es[self.ecount()-1]['diameters']=np.array(diams)
+                           self.es[self.ecount()-1]['diameters2']=np.array(diams2)
+                           self.es[self.ecount()-1]['lengths']=np.array(lengths)
+                           self.es[self.ecount()-1]['length']=np.sum(lengths)
+                           self.es[self.ecount()-1]['lengths2']=np.array(lengths2)
+                           self.es[self.ecount()-1]['diameter']=np.mean(diams)
+                           self.es[self.ecount()-1]['startSeg']=self.es[incidentStart]['indexOrig']
+                           self.es[self.ecount()-1]['endSeg']=self.es[j]['indexOrig']
+                       #if boolNkind:
+                       #    self.es[self.ecount()-1][nkindKey+'s']=np.array(kinds)
+                       if boolNkind:
+                           if len(np.unique(kinds)) != 1:
+                               if len(np.unique(kinds)) == 3:
+                                   if kinds.count(np.unique(kinds)[0]) > kinds.count(np.unique(kinds)[1]) and kinds.count(np.unique(kinds)[0]) > kinds.count(np.unique(kinds)[2]):
+                                       self.es[self.ecount()-1][nkindKey]=np.unique(kinds)[0]
+                                   elif kinds.count(np.unique(kinds)[1]) > kinds.count(np.unique(kinds)[0]) and kinds.count(np.unique(kinds)[1]) > kinds.count(np.unique(kinds)[2]):
+                                       self.es[self.ecount()-1][nkindKey]=np.unique(kinds)[1]
+                                   elif kinds.count(np.unique(kinds)[2]) > kinds.count(np.unique(kinds)[0]) and kinds.count(np.unique(kinds)[2]) > kinds.count(np.unique(kinds)[1]):
+                                       self.es[self.ecount()-1][nkindKey]=np.unique(kinds)[2]
+                                   else:
+                                       if kinds.count(np.unique(kinds)[0]) == kinds.count(np.unique(kinds)[1]):
+                                           self.es[self.ecount()-1][nkindKey]=np.unique(kinds)[0]
+                                       elif kinds.count(np.unique(kinds)[0]) == kinds.count(np.unique(kinds)[2]):
+                                           self.es[self.ecount()-1][nkindKey]=np.unique(kinds)[0]
+                                       else:
+                                           self.es[self.ecount()-1][nkindKey]=np.unique(kinds)[1]
+                               else:
+                                   if kinds.count(np.unique(kinds)[0]) > kinds.count(np.unique(kinds)[1]):
+                                       self.es[self.ecount()-1][nkindKey]=np.unique(kinds)[0]
+                                   elif kinds.count(np.unique(kinds)[1]) > kinds.count(np.unique(kinds)[0]):
+                                       self.es[self.ecount()-1][nkindKey]=np.unique(kinds)[1]
+                                   else:
+                                       if kinds.count(np.unique(kinds)[0]) == kinds.count(np.unique(kinds)[1]):
+                                           self.es[self.ecount()-1][nkindKey]=np.unique(kinds)[0]
+                           else:
+                               self.es[self.ecount()-1][nkindKey]=np.unique(kinds)[0]
+                       if boolSurfPlun:
+                           if len(np.unique(surfPlun)) != 1:
+                               if len(np.unique(surfPlun)) == 3:
+                                   if surfPlun.count(np.unique(surfPlun)[0]) > surfPlun.count(np.unique(surfPlun)[1]) and surfPlun.count(np.unique(surfPlun)[0]) > surfPlun.count(np.unique(surfPlun)[2]):
+                                       self.es[self.ecount()-1][surfPlunKey]=np.unique(surfPlun)[0]
+                                   elif surfPlun.count(np.unique(surfPlun)[1]) > surfPlun.count(np.unique(surfPlun)[0]) and surfPlun.count(np.unique(surfPlun)[1]) > surfPlun.count(np.unique(surfPlun)[2]):
+                                       self.es[self.ecount()-1][surfPlunKey]=np.unique(surfPlun)[1]
+                                   elif surfPlun.count(np.unique(surfPlun)[2]) > surfPlun.count(np.unique(surfPlun)[0]) and surfPlun.count(np.unique(surfPlun)[2]) > surfPlun.count(np.unique(surfPlun)[1]):
+                                       self.es[self.ecount()-1][surfPlunKey]=np.unique(surfPlun)[2]
+                                   else:
+                                       if surfPlun.count(np.unique(surfPlun)[0]) == surfPlun.count(np.unique(surfPlun)[1]):
+                                           self.es[self.ecount()-1][surfPlunKey]=np.unique(surfPlun)[1]
+                                       elif surfPlun.count(np.unique(surfPlun)[0]) == surfPlun.count(np.unique(surfPlun)[2]):
+                                           self.es[self.ecount()-1][surfPlunKey]=np.unique(surfPlun)[2]
+                                       else:
+                                           self.es[self.ecount()-1][surfPlunKey]=np.unique(surfPlun)[1]
+                               else:
+                                   if surfPlun.count(np.unique(surfPlun)[0]) > surfPlun.count(np.unique(surfPlun)[1]):
+                                       self.es[self.ecount()-1][surfPlunKey]=np.unique(surfPlun)[0]
+                                   elif surfPlun.count(np.unique(surfPlun)[1]) > surfPlun.count(np.unique(surfPlun)[0]):
+                                       self.es[self.ecount()-1][surfPlunKey]=np.unique(surfPlun)[1]
+                                   else:
+                                       if surfPlun.count(np.unique(surfPlun)[0]) == surfPlun.count(np.unique(surfPlun)[1]):
+                                           self.es[self.ecount()-1][surfPlunKey]=np.unique(surfPlun)[1]
+                           else:
+                               self.es[self.ecount()-1][surfPlunKey]=np.unique(surfPlun)[0]
+                #else:
+                #    print('Edge Already done')
+
+        delVertices=np.unique(delVertices)
+        self.delete_vertices(delVertices)
+        del(self.vs['neighbors'])
+        del(self.vs['incidents'])
+        self.vs['degree']=self.degree()
+        noConcatenatedEdges=self.es(startSeg_eq=None).indices
+        for e in self.es[noConcatenatedEdges]:
+            e['startSeg']=e['indexOrig']
+            e['endSeg']=e['indexOrig']
+
+        del(self.es['indexOrig'])
+
+        #lookg for no points edges
+        noPoints=self.es(points_eq=None).indices
+        self.add_points(1.,noPoints)
+        
+        #Chose between effective and other diameter
+        countAssignMedian = 0
+        for i in range(self.ecount()):
+            e=self.es[i]
+            resistances=[]
+            for j in range(len(e['lengths2'])):
+                resistances.append(e['lengths2'][j]/(e['diameters2'][j]**4))
+            resistanceTot=np.sum(resistances)
+            e['effDiam']=(e['length']/resistanceTot)**(0.25)
+            if np.abs(np.median(e['diameters2'])-e['effDiam'])/(np.mean([np.median(e['diameters2']),e['effDiam']])) > 0.1:
+                e['effDiam']=np.median(e['diameters2'])
+                countAssignMedian += 1
+            if e['length'] == 0:
+                print('Length problem')
+                print(i)
+                print(np.median(e['diameters2']))
+                print(e['length'])
+                print(e['lengths2'])
+                print(resistanceTot)
+                print(resistances)
+
+        self['countAssignMedian']=countAssignMedian
+        self.es['diameter']=deepcopy(self.es['effDiam'])
+        del(self.es['effDiam'])
+        
 
