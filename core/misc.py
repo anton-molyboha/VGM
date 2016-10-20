@@ -332,7 +332,11 @@ def intersection_plane_line(pP,nP,pL,vL):
     else:
         coordsPoint = []
 
-    return coordsPoint
+    newCoordsPoint=[]
+    for coords in coordsPoint:
+        newCoordsPoint.append(np.float(coords))
+
+    return newCoordsPoint
 #------------------------------------------------------------------------------
 def make_graph_gased_on_points(pL,G):
     """creates a graph with the points given (for visualization in paraview)
