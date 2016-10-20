@@ -1,0 +1,28 @@
+linearSystem_htd.py:
+
+the option is added that instead of using the empirical function to compute mu_vivo and the velocity factor
+a value can be directly given for both of them
+
+
+linearSystem_htd_TotFixedDT.py:
+
+- some minor code improvements
+- bugfix: at the distribution of RBCs at non capillary divergent bifurcations.
+
+
+physiology.spyx:
+
+- a diameter limit is introduced fot the function: tube_to_discharge_hematocrit. With too large diameters
+  a numerical error will occur otherwise. For diameters larger 1000 micrometers the discharge hematocrit 
+  is set equal to the tube hematocrit
+
+
+vascularGraph.py:
+
+- the assertPoints function so far only adjusted the edge attribute 'points'. Now it also adjusts the order
+  of the attributes 'diameters', 'lengths' and if present 'diameters2' and 'lengths2'
+
+- the function: split_edge_relDist has been improved: splitting of edges where one point exactly lies at the
+  relDist required is now possible
+
+- the function create_tortuous_structure has been added
