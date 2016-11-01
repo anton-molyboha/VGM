@@ -15,7 +15,6 @@ from __future__ import division
 import numpy as np
 from sys import stdout
 
-from copy import deepcopy
 from pyamg import smoothed_aggregation_solver, rootnode_solver, util
 import pyamg
 from scipy import finfo, ones, zeros
@@ -59,16 +58,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
                initTrack: If tracking is initialized RBCindex is distributed. And RBCs so track
                    are added to trackRBCs.
                **kwargs:
-               ht0: The initial hematocrit in the capillary bed. If G already 
-                    contains the relevant properties from an earlier simulation
-                    (i.e. rRBC edge property), ht0 can be set to 'current'.
-                    This will make use of the current RBC distribution as the
-                    initial hematocrit
-               hd0: The initial hematocrit in the capillary bed is calculated by the given
-                    initial discharge hematocrit. If G already contains the relevant 
-                    properties from an earlier simulation (i.e. rRBC edge property), hd0 
-                    can be set to 'current'. This will make use of the current RBC 
-                    distribution as the initial hematocrit
+               ht0: The initial hematocrit in the capillary bed. ht0 needs to be provided if init=1
                plasmaViscosity: The dynamic plasma viscosity. If not provided,
                                 a literature value will be used.
                analyzeBifEvents: boolean if bifurcation events should be analyzed (Default = 0)
@@ -76,6 +66,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
                    (innerDiam = 1 --> inner diameter given) (Default = 0)
                startTrackFrom: if no list is given, RBCs are tracked from all penetrating arterioles
                initTrack: 1 to initialize tracking, 0 for restarts of tracking
+               species: 'rat', 'mouse' or 'human', default is 'rat'
         OUTPUT: None, however the following items are created:
                 self.A: Matrix A of the linear system, holding the conductance
                         information.
@@ -96,10 +87,8 @@ class LinearSystemHtdTotFixedDTTrack(object):
         self._tSample = 0.0
         self._filenamelist = []
         self._timelist = []
-        #self._filenamelistAvg = []
 	self._timelistAvg = []
         self._sampledict = {} 
-	#self._transitTimeDict = {}
 	self._init=init
         self._scaleToDef=vgm.units.scaling_factor_du('mmHg',G['defaultUnits'])
         self._dtFix=0.0
@@ -113,6 +102,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
         self._trackRBCsWhichLeft=[]
         G.es['source']=[e.source for e in G.es]
         G.es['target']=[e.target for e in G.es]
+        G.es['countRBCs']=[0]*G.ecount()
         G.es['crosssection']=np.array([0.25*np.pi]*G.ecount())*np.array(G.es['diameter'])**2
         G.es['volume']=[e['crosssection']*e['length'] for e in G.es]
         
@@ -201,11 +191,8 @@ class LinearSystemHtdTotFixedDTTrack(object):
         G.vs['isCap']=[False]*G.vcount()
         self._interfaceVertices=[]
         for i in xrange(G.vcount()):
-            #print(i)
             category=[]
             for j in adjacent[i]:
-                #print(j)
-                #print(G.es.attribute_names())
                 if G.es[int(j)]['diameter'] < dThreshold:
                     category.append(1)
                 else:
@@ -220,20 +207,10 @@ class LinearSystemHtdTotFixedDTTrack(object):
 
         # Arterial-side inflow:
         if init:
-            if 'htdBC' in G.es.attribute_names() and 'httBC' not in G.es.attribute_names():
-                G.es['httBC']=[e['htdBC'] if e['htdBC'] == None else \
-                    self._P.discharge_to_tube_hematocrit(e['htdBC'],e['diameter'],invivo) for e in G.es()]
             if not 'httBC' in G.es.attribute_names():
                 for vi in G['av']:
                     for ei in G.adjacent(vi):
-                        G.es[ei]['httBC'] = self._P.tube_hematocrit(
-                                                G.es[ei]['diameter'], 'a')
-
-        #Convert tube hematocrit boundary condition to htdBC (in case it does not already exist)
-        #if not 'htdBC' in G.es.attribute_names():
-        #   G.es['htdBC']=[e['httBC'] if e['httBC'] == None else \
-        #        self._P.tube_to_discharge_hematocrit(e['httBC'],e['diameter'],invivo) for e in G.es()]
-        #print('Htt BC assigned')
+                        G.es[ei]['httBC'] = self._P.tube_hematocrit(G.es[ei]['diameter'], 'a')
 
         httBC_edges = G.es(httBC_ne=None).indices
         #Save initial value of httBC
@@ -246,28 +223,21 @@ class LinearSystemHtdTotFixedDTTrack(object):
 
         # Assign initial RBC positions:
 	if init:
-            if kwargs.has_key('hd0'):
-                hd0=kwargs['hd0']
-                if hd0 == 'current':
-                    ht0=hd0
-                else:
-                    ht0='dummy'
-            if kwargs.has_key('ht0'):
+            if 'ht0' not in kwargs.keys():
+                print('ERROR no inital tube hematocrit given for distribution of RBCs')
+            else:
                 ht0=kwargs['ht0']
-            if ht0 != 'current':
-                for e in G.es:
-                    lrbc = e['minDist']
-                    Nmax = max(int(np.floor(e['nMax'])), 1)
-                    if e['httBC'] is not None:
-                        N = int(np.round(e['httBC'] * Nmax))
-                    else:
-                        if kwargs.has_key('hd0'):
-                            ht0=self._P.discharge_to_tube_hematocrit(hd0,e['diameter'],invivo)
-                        N = int(np.round(ht0 * Nmax))
-                    indices = sorted(np.random.permutation(Nmax)[:N])
-                    e['rRBC'] = np.array(indices) * lrbc + lrbc / 2.0
-                    #e['tRBC'] = np.array([])
-        	    #e['path'] = np.array([])
+            for e in G.es:
+                lrbc = e['minDist']
+                Nmax = max(int(np.floor(e['nMax'])), 1)
+                if e['httBC'] is not None:
+                    N = int(np.round(e['httBC'] * Nmax))
+                else:
+                    if kwargs.has_key('hd0'):
+                        ht0=self._P.discharge_to_tube_hematocrit(hd0,e['diameter'],invivo)
+                    N = int(np.round(ht0 * Nmax))
+                indices = sorted(np.random.permutation(Nmax)[:N])
+                e['rRBC'] = np.array(indices) * lrbc + lrbc / 2.0
         print('Initial nRBC computed')    
         G.es['nRBC']=[len(e['rRBC']) for e in G.es]
         #Assign RBCindex to all RBCs
@@ -283,24 +253,8 @@ class LinearSystemHtdTotFixedDTTrack(object):
         else:
             penetratingA=[]
 
-        #TODO this is fixed for 
         if penetratingA==[]:
-            srxtmBC_indexOrig=[270, 448, 388, 571, 393, 402, 362, 364, 490, 3317, 358]
-            srxtmVertexPA=[]
-            paVertex=[]
-            for i in srxtmBC_indexOrig:
-                vertex=G.vs(indexOrig_eq=i).indices[0]
-                if G.vs['av'][vertex]==1:
-                    paVertex.append(vertex)
-                    srxtmVertexPA.append(G.neighbors(vertex)[0])
-                    penetratingA.append(G.adjacent(vertex)[0])
-                else:
-                    for j in G.neighbors(vertex):
-                        if G.vs[j]['av']==1:
-                            paVertex.append(j)
-                            srxtmVertexPA.append(vertex)
-                            penetratingA.append(G.adjacent(j)[0])
-                            break
+            print('ERROR a list of inlets should be given from where the tracking is to be started')
 
         self._penetratingA=penetratingA
         if initTrack:
@@ -340,11 +294,11 @@ class LinearSystemHtdTotFixedDTTrack(object):
         for v in G.vs:
             if v['pBC'] != None:
                 v['pBC']=v['pBC']*self._scaleToDef
-        self._update_eff_resistance_and_LS(None, None)
+        self._update_eff_resistance_and_LS(None)
         print('Matrix created')
         self._solve('iterative2')
         print('Matrix solved')
-        self._G.vs['pressure'] = deepcopy(self._x)
+        self._G.vs['pressure'] = self._x[:]
         #Convert deaultUnits to 'pBC' ['mmHG']
         for v in G.vs:
             if v['pBC'] != None:
@@ -398,9 +352,6 @@ class LinearSystemHtdTotFixedDTTrack(object):
         print(self._eps)
         stdout.write("\rEstimated network turnover time Ttau=%f        \n" % G['Ttau'])
 
-        #for e in self._G.es(flow_le=self._eps*1e6):
-        #    e['rRBC'] = []
-            
     #--------------------------------------------------------------------------
 
     def _compute_mu_sigma_inlet_RBC_distribution(self, httBC):
@@ -411,12 +362,8 @@ class LinearSystemHtdTotFixedDTTrack(object):
         OUTPUT: None, the edge properties 'resistance' and 'specificResistance'
                 are updated (or created).
         """
-        #mean_LD=0.28
         mean_LD=httBC
         std_LD=0.1*mean_LD
-        #std_LD=0.1*mean_LD
-        #if std_LD > 0.01:
-        #    std_LD = 0.01
         
         #PDF log-normal
         f_x = lambda x,mu,sigma: 1./(x*np.sqrt(2*np.pi)*sigma)*np.exp(-1*(np.log(x)-mu)**2/(2*sigma**2))
@@ -514,9 +461,6 @@ class LinearSystemHtdTotFixedDTTrack(object):
                 not exist previously)
         """
         G = self._G
-#        G.es['lpg'] = np.array(G.es['specificResistance']) * \
-#                      np.array(G.es['flow']) * np.array(G.es['resistance']) / \
-#                      np.array(G.es['effResistance'])
         G.es['lpg'] = np.array(G.es['specificResistance']) * \
                       np.array(G.es['flow'])
 
@@ -959,23 +903,9 @@ class LinearSystemHtdTotFixedDTTrack(object):
         self._G=run_faster.update_flow_and_v(self._G,self._invivo,vfList,vrbc)
         G= self._G
 
-        #G = self._G
-        #invivo=self._invivo
-        #vf = self._P.velocity_factor
-        #pi=np.pi
-        #G.es['flow'] = np.array([abs(G.vs[e.source]['pressure'] -                                           
-        #                    G.vs[e.target]['pressure']) /res                        
-        #                    for e,res in zip(G.es,G.es['effResistance'])])
-        # RBC velocity is not defined if tube_ht==0, using plasma velocity
-        # instead:
-        #G.es['v'] = [4 * flow * vf(d, invivo, tube_ht=htt) /                  
-        #            (pi * d**2) if htt > 0 else                                
-        #            4 * flow / (pi * d**2)                                     
-         #           for flow,d,htt in zip(G.es['flow'],G.es['diameter'],G.es['htt'])]
-
     #--------------------------------------------------------------------------
 
-    def _update_eff_resistance_and_LS(self, newGraph=None, vertex=None):
+    def _update_eff_resistance_and_LS(self, vertex=None):
         """Constructs the linear system A x = b where the matrix A contains the
         conductance information of the vascular graph, the vector b specifies
         the boundary conditions and the vector x holds the pressures at the
@@ -994,9 +924,6 @@ class LinearSystemHtdTotFixedDTTrack(object):
                 b: Vector b of the linear system, holding the boundary
                    conditions.
         """
-
-        #if newGraph is not None:
-        #    self._G = newGraph
 
         G = self._G
         P = self._P
@@ -1092,9 +1019,6 @@ class LinearSystemHtdTotFixedDTTrack(object):
             rbcMoved = 0
         edgeList=G.es[edgeList0]
         RBCindexCurrent = self._RBCindexCurrent
-        #edgesBox=self._allEdgesBox
-        #borderEdges=self._borderEdges
-        #internalEdges=self._internalEdges
         #Edges are sorted based on the pressure at the outlet
         pOut=[G.vs[e['target']]['pressure'] if e['sign'] == 1.0 else G.vs[e['source']]['pressure']
             for e in edgeList]
@@ -1113,9 +1037,9 @@ class LinearSystemHtdTotFixedDTTrack(object):
             sign=e['sign']
             #Get bifurcation vertex
             if sign == 1:
-                vi=e.target
+                vi=e['target']
             else:
-                vi=e.source
+                vi=e['source']
             edgesInvolved=G.adjacent(vi)
             nRBCSumBefore = np.sum(G.es[edgesInvolved]['nRBC'])
             overshootsNo=0 #Reset - Number of overshoots acutally taking place (considers possible number of bifurcation events)
@@ -1167,10 +1091,9 @@ class LinearSystemHtdTotFixedDTTrack(object):
                             RBCsleft= e['RBCindex'][0:noBifEvents]
                         for out in RBCsleft:
                             trackRBCsWhichLeft.append(out)
-                        #trackRBCsWhichLeft=trackRBCsWhichLeft + RBCsleft
                         e['RBCindex']=[e['RBCindex'][:-noBifEvents] if sign == 1.0 else e['RBCindex'][noBifEvents::]][0]
-                        vertexUpdate.append(e.target)
-                        vertexUpdate.append(e.source)
+                        vertexUpdate.append(e['target'])
+                        vertexUpdate.append(e['source'])
                         edgeUpdate.append(ei)
             #-------------------------------------------------------------------------------------------
                     #if vertex is connecting vertex
@@ -1269,6 +1192,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
                                     RBCindex=e['RBCindex'][:overshootsNo]
                                     RBCindex=RBCindex[::-1]
                                 #Add rbcs to new Edge       
+                                oe['countRBCs']+=len(position)
                                 if oe['sign'] == 1.0:
                                     oe['rRBC']=np.concatenate([position, oe['rRBC']])
                                     oe['RBCindex']=np.concatenate([RBCindex,oe['RBCindex']])
@@ -2365,10 +2289,10 @@ class LinearSystemHtdTotFixedDTTrack(object):
                                                                     if len(oe3['rRBC']) > 0:
                                                                         if position3[index3]-oe3['rRBC'][-1] < oe3['minDist']:
                                                                             position3[index3]=oe3['rRBC'][-1]+oe3['minDist']
-                                                                        else:
-                                                                        #Avoid overshooting whole vessels
-                                                                            if position3[index3] < 0:
-                                                                                position3[index3]=0
+                                                                    else:
+                                                                    #Avoid overshooting whole vessels
+                                                                        if position3[index3] < 0:
+                                                                            position3[index3]=0
                                                                 positionPref3.append(position3[index3])
                                                                 counterPref3.append(index)
                                                                 countPref3 += 1
@@ -2685,6 +2609,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
                                 RBCindex.append(e['RBCindex'][counterPref1[i]])
                             if e['sign'] == 1:
                                 RBCindex=RBCindex[::-1]
+                            oe['countRBCs']+=len(positionPref1)
                             if oe['sign'] == 1.0:
                                 oe['rRBC']=np.concatenate([positionPref1[::-1], oe['rRBC']])
                                 oe['RBCindex']=np.concatenate([RBCindex,oe['RBCindex']])
@@ -2697,6 +2622,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
                                 RBCindex2.append(e['RBCindex'][counterPref2[i]])
                             if e['sign'] == 1:
                                 RBCindex2=RBCindex2[::-1]
+                            oe2['countRBCs']+=len(positionPref2)
                             if oe2['sign'] == 1.0:
                                 oe2['rRBC']=np.concatenate([positionPref2[::-1], oe2['rRBC']])
                                 oe2['RBCindex']=np.concatenate([RBCindex2,oe2['RBCindex']])
@@ -2710,6 +2636,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
                                     RBCindex3.append(e['RBCindex'][counterPref3[i]])
                                 if e['sign'] == 1:
                                     RBCindex3=RBCindex3[::-1]
+                                oe3['countRBCs']+=len(positionPref3)
                                 if oe3['sign'] == 1.0:
                                     oe3['rRBC']=np.concatenate([positionPref3[::-1], oe3['rRBC']])
                                     oe3['RBCindex']=np.concatenate([RBCindex3,oe3['RBCindex']])
@@ -2964,6 +2891,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
                                 else:
                                     RBCindex.append(edge['RBCindex'][index[iE]])
                                 index[iE] = index[iE] + 1
+                            oe['countRBCs']+=len(position)
                             if oe['sign'] == 1.0:
                                 oe['rRBC']=np.concatenate([position, oe['rRBC']])
                                 oe['RBCindex']=np.concatenate([RBCindex[::-1],oe['RBCindex']])
@@ -3516,8 +3444,6 @@ class LinearSystemHtdTotFixedDTTrack(object):
                                     index=-1*(i+1)
                                     index1=-1*(i+1) if oe['sign'] == 1.0 else i
                                     index2=-1*(i+1) if oe2['sign'] == 1.0 else i
-                                    #posRBC1=position1[index1] if oe['sign'] == 1 else oe['length']-position1[index1]
-                                    #posRBC2=position2[index2] if oe2['sign'] == 1 else oe2['length']-position2[index2]
                                     #check if RBC still fits into Prefered OutE
                                     if posNoBifEventsPref > countPref1 and pref1Full == 0:
                                         #Check if there are RBCs present in outEPref
@@ -3796,7 +3722,6 @@ class LinearSystemHtdTotFixedDTTrack(object):
                             dummyOut1=[1]*len(positionPref1)
                             dummyOut2=[2]*len(positionPref2)
                             indicesAndInEdges=zip(indexPref1+indexPref2,inEPref1+inEPref2,dummyOut1+dummyOut2) 
-                            #indicesAndInEdges.sort() #for what?
                             RBCindices=[[],[]]
                             index=[0,0]
                             for i in xrange(len(indicesAndInEdges)):
@@ -3824,6 +3749,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
                             RBCindex=RBCindices[0]
                             RBCindex2=RBCindices[1]
                             #Add rbcs to outE
+                            oe['countRBCs']+=len(positionPref1)
                             if oe['sign'] == 1.0:
                                 oe['rRBC']=np.concatenate([positionPref1[::-1], oe['rRBC']])
                                 oe['RBCindex']=np.concatenate([RBCindex[::-1],oe['RBCindex']])
@@ -3831,6 +3757,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
                                 oe['rRBC']=np.concatenate([oe['rRBC'],positionPref1])
                                 oe['RBCindex']=np.concatenate([oe['RBCindex'],RBCindex])
                             #Add rbcs to outEPref2       
+                            oe2['countRBCs']+=len(positionPref2)
                             if oe2['sign'] == 1.0:
                                 oe2['rRBC']=np.concatenate([positionPref2[::-1], oe2['rRBC']])
                                 oe2['RBCindex']=np.concatenate([RBCindex2[::-1],oe2['RBCindex']])
@@ -3939,7 +3866,6 @@ class LinearSystemHtdTotFixedDTTrack(object):
                 length = e['length']
                 nMaxNew=e['nMax']-len(e['rRBC'])
                 if len(e['rRBC']) > 0:
-                    #if cum_length > distToFirst:
                     posFirst=e['rRBC'][0] if e['sign']==1.0 else e['length']-e['rRBC'][-1]
                     e['posFirst_last']=posFirst
                     e['v_last'] = e['v']
@@ -3950,7 +3876,6 @@ class LinearSystemHtdTotFixedDTTrack(object):
                     e['posFirst_last']=posFirst
                     if e['v'] > e['v_last']:
                         e['v_last']=e['v']
-                    #e['v_last']=e['v']
                 while cum_length >= lrbc and nMaxNew > 0:
                     if len(e['keep_rbcs']) != 0:
                         if posFirst - e['keep_rbcs'][0] >= 0:
@@ -3964,7 +3889,6 @@ class LinearSystemHtdTotFixedDTTrack(object):
                             cum_length = posFirst
                             e['keep_rbcs']=[]
                             e['posFirst_last']=posFirst
-                            #e['v_last']=e['v']
                             RBCindexCurrent += 1
                             RBCindex.append(RBCindexCurrent)
                         else:
@@ -3972,7 +3896,6 @@ class LinearSystemHtdTotFixedDTTrack(object):
                     else:
                         #number of RBCs randomly chosen to average htt
                         number=np.exp(e['logNormal'][0]+e['logNormal'][1]*np.random.randn(1)[0])
-                        #self._spacing.append(number)
                         spacing = lrbc+lrbc*number
                         if posFirst - spacing >= 0:
                             if posFirst - spacing > e['length']:
@@ -3984,12 +3907,10 @@ class LinearSystemHtdTotFixedDTTrack(object):
                             nMaxNew += -1
                             cum_length = posFirst
                             e['posFirst_last']=posFirst
-                            #e['v_last']=e['v']
                             RBCindexCurrent += 1
                             RBCindex.append(RBCindexCurrent)
                         else:
                             e['keep_rbcs']=[spacing]
-                            #e['v_last']=e['v']
                             if len(rRBC) == 0:
                                 e['posFirst_last']=posFirst
                             else:
@@ -4008,14 +3929,14 @@ class LinearSystemHtdTotFixedDTTrack(object):
                     if e['sign'] == 1:
                         e['rRBC'] = np.concatenate([rRBC[::-1], e['rRBC']])
                         e['RBCindex'] = np.concatenate([RBCindex[::-1], e['RBCindex']])
-                        vertexUpdate.append(e.target)
-                        vertexUpdate.append(e.source)
+                        vertexUpdate.append(e['target'])
+                        vertexUpdate.append(e['source'])
                         edgeUpdate.append(ei)
                     else:
                         e['rRBC'] = np.concatenate([e['rRBC'], length-rRBC])
                         e['RBCindex'] = np.concatenate([e['RBCindex'], RBCindex])
-                        vertexUpdate.append(e.target)
-                        vertexUpdate.append(e.source)
+                        vertexUpdate.append(e['target'])
+                        vertexUpdate.append(e['source'])
                         edgeUpdate.append(ei)
             if noBifEvents > 0:
                 if G.vs[vi]['vType'] == 6 or G.vs[vi]['vType'] == 4:
@@ -4053,13 +3974,11 @@ class LinearSystemHtdTotFixedDTTrack(object):
                                     cum_length = posFirst
                                     e2['keep_rbcs']=[]
                                     e2['posFirst_last']=posFirst
-                                    #e2['v_last']=e2['v']
                                     RBCindexCurrent += 1
                                     RBCindex2.append(RBCindexCurrent)
                                 else:
                                     if len(e2['rRBC']) > 0:
                                         e2['posFirst_last'] = posFirst
-                                        #e2['v_last']=e2['v']
                                     break
                             else:
                                 #number of RBCs randomly chosen to average htt
@@ -4075,12 +3994,10 @@ class LinearSystemHtdTotFixedDTTrack(object):
                                     nMaxNew += -1
                                     cum_length = posFirst
                                     e2['posFirst_last']=posFirst
-                                    #e2['v_last']=e2['v']
                                     RBCindexCurrent += 1
                                     RBCindex2.append(RBCindexCurrent)
                                 else:
                                     e2['keep_rbcs']=[spacing]
-                                    #e2['v_last']=e2['v']
                                     if len(rRBC2) == 0:
                                         e2['posFirst_last']=posFirst
                                     else:
@@ -4099,14 +4016,14 @@ class LinearSystemHtdTotFixedDTTrack(object):
                             if e2['sign'] == 1:
                                 e2['rRBC'] = np.concatenate([rRBC2[::-1], e2['rRBC']])
                                 e2['RBCindex'] = np.concatenate([RBCindex2[::-1], e2['RBCindex']])
-                                vertexUpdate.append(e2.target)
-                                vertexUpdate.append(e2.source)
+                                vertexUpdate.append(e2['target'])
+                                vertexUpdate.append(e2['source'])
                                 edgeUpdate.append(e2.index)
                             else:
                                 e2['rRBC'] = np.concatenate([e2['rRBC'], length-rRBC2])
                                 e2['RBCindex'] = np.concatenate([e2['RBCindex'], RBCindex2])
-                                vertexUpdate.append(e2.target)
-                                vertexUpdate.append(e2.source)
+                                vertexUpdate.append(e2['target'])
+                                vertexUpdate.append(e2['source'])
                                 edgeUpdate.append(e2.index)
                     if G.vs[vi]['vType']==4 and boolTrifurcation:
                         #Check if httBC exists
@@ -4143,13 +4060,11 @@ class LinearSystemHtdTotFixedDTTrack(object):
                                         cum_length = posFirst
                                         e3['keep_rbcs']=[]
                                         e3['posFirst_last']=posFirst
-                                        #e3['v_last']=e3['v']
                                         RBCindexCurrent += 1
                                         RBCindex3.append(RBCindexCurrent)
                                     else:
                                         if len(e3['rRBC']) > 0:
                                             e3['posFirst_last'] = posFirst
-                                            #e3['v_last']=e3['v']
                                         break
                                 else:
                                     #number of RBCs randomly chosen to average htt
@@ -4165,12 +4080,10 @@ class LinearSystemHtdTotFixedDTTrack(object):
                                         nMaxNew += -1
                                         cum_length = posFirst
                                         e3['posFirst_last']=posFirst
-                                        #e3['v_last']=e3['v']
                                         RBCindexCurrent += 1
                                         RBCindex3.append(RBCindexCurrent)
                                     else:
                                         e3['keep_rbcs']=[spacing]
-                                        #e3['v_last']=e3['v']
                                         if len(rRBC3) == 0:
                                             e3['posFirst_last']=posFirst
                                         else:
@@ -4189,14 +4102,14 @@ class LinearSystemHtdTotFixedDTTrack(object):
                                 if e3['sign'] == 1:
                                     e3['rRBC'] = np.concatenate([rRBC3[::-1], e3['rRBC']])
                                     e3['RBCindex'] = np.concatenate([RBCindex3[::-1], e3['RBCindex']])
-                                    vertexUpdate.append(e3.target)
-                                    vertexUpdate.append(e3.source)
+                                    vertexUpdate.append(e3['target'])
+                                    vertexUpdate.append(e3['source'])
                                     edgeUpdate.append(e3.index)
                                 else:
                                     e3['rRBC'] = np.concatenate([e3['rRBC'], length-rRBC3])
                                     e3['RBCindex'] = np.concatenate([e3['RBCindex'], RBCindex3])
-                                    vertexUpdate.append(e3.target)
-                                    vertexUpdate.append(e3.source)
+                                    vertexUpdate.append(e3['target'])
+                                    vertexUpdate.append(e3['source'])
                                     edgeUpdate.append(e3.index)
             if noBifEvents != 0 or boolHttEdge == 1 or boolHttEdge2==1 or boolHttEdge3==1:
                 nRBCSumAfter=0
@@ -4229,8 +4142,8 @@ class LinearSystemHtdTotFixedDTTrack(object):
                         if edge['rRBC'][0] < 0 - eps or edge['rRBC'][-1] > edge['length'] + eps:
                             print('BIGERROR BEGINNING END 2')
             if overshootsNo != 0:
-                vertexUpdate.append(e.target)
-                vertexUpdate.append(e.source)
+                vertexUpdate.append(e['target'])
+                vertexUpdate.append(e['source'])
                 for i in edgesInvolved:
                     edgeUpdate.append(i)
                 if boolHttEdge:
@@ -4318,7 +4231,6 @@ class LinearSystemHtdTotFixedDTTrack(object):
             try:
                 test=RBCdict[trackRBCs[i]]
             except KeyError:
-            #if trackRBCs[i] not in RBCdict.keys():
                 RBCdict[currentRBC]=[]
                 RBCdict[currentRBC].append([]) #time
                 RBCdict[currentRBC].append([]) #edge
@@ -4326,10 +4238,10 @@ class LinearSystemHtdTotFixedDTTrack(object):
             stdout.flush()
             e=G.es[currentEdge]
             if currentRBC not in e['RBCindex']:
-                adjacents=G.adjacent(e.source)+G.adjacent(e.target)
+                adjacents=G.adjacent(e['source'])+G.adjacent(e['target'])
                 adjacents=np.unique(adjacents) 
                 adjacents=adjacents.tolist()
-                neighbors=G.neighbors(e.source)+G.neighbors(e.target)
+                neighbors=G.neighbors(e['source'])+G.neighbors(e['target'])
                 neighbors=np.unique(neighbors) 
                 neighbors=neighbors.tolist()
                 foundBool=0
@@ -4340,8 +4252,6 @@ class LinearSystemHtdTotFixedDTTrack(object):
                         currentEdge=j
                         foundBool=1
                         RBCindex=e2['RBCindex']
-                        #RBCindex=RBCindex.tolist()
-                        #index=RBCindex.index(currentRBC)
                         index=np.where(RBCindex==currentRBC)[0][0]
                         RBCdict[currentRBC][0].append(tSample)
                         RBCdict[currentRBC][1].append(currentEdge)
@@ -4351,15 +4261,6 @@ class LinearSystemHtdTotFixedDTTrack(object):
                     if currentRBC in trackRBCsWhichLeft:
                         eliminateFromList.append(currentRBC)
                         eliminateFromListRBCsWhichLeft.append(currentRBC)
-                    #if e['sign'] == 1 and e.target in G['vv']:
-                    #    eliminateFromList.append(i)
-                    #elif e['sign'] == -1 and e.source in G['vv']:
-                    #    eliminateFromList.append(i)
-                    #elif e['sign'] != e['signOld']:
-                    #    if e['sign'] == -1 and e.target in G['av']:
-                    #        eliminateFromList.append(i)
-                    #    elif e['sign'] == 1 and e.source in G['av']:
-                    #        eliminateFromList.append(i)
                     else:
                         print('WARNING RBC to track not found!')
                         print(currentRBC)
@@ -4371,10 +4272,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
             else:
                 #Check if already an index is attributed to the RBC
                 RBCindex=np.array(e['RBCindex'])
-                #RBCindex=np.array(RBCindex)
-                #RBCindex=RBCindex.tolist()
                 index=np.where(RBCindex==currentRBC)[0][0]
-                #index=RBCindex.index(currentRBC)
                 RBCdict[currentRBC][0].append(tSample)
                 RBCdict[currentRBC][1].append(currentEdge)
                 RBCdict[currentRBC][2].append(e['rRBC'][index])
@@ -4383,13 +4281,11 @@ class LinearSystemHtdTotFixedDTTrack(object):
             try:
                 test=flowdict[eprop]
             except KeyError:
-            #if eprop not in RBCdict.keys():
                 flowdict[eprop]=[]
             flowdict[eprop].append(G.es[eprop])
         try:
             test=flowdict['time']
         except KeyError:
-        #if 'time' not in RBCdict.keys():
              flowdict['time']=[]
         flowdict['time'].append(self._tSample)
 
@@ -4440,8 +4336,8 @@ class LinearSystemHtdTotFixedDTTrack(object):
          OUTPUT: None (files are written to disk)
         """
         G=self._G
-        tPlot = self._tPlot # deepcopy, since type is float
-        tSample = self._tSample # deepcopy, since type is float
+        tPlot = self._tPlot 
+        tSample = self._tSample 
         filenamelist = self._filenamelist
         self._dt=dtfix
         timelist = self._timelist
@@ -4474,8 +4370,6 @@ class LinearSystemHtdTotFixedDTTrack(object):
             if init == True:
                 self._tSample = 0.0
                 self._sampledict = {}
-                #self._transitTimeDict = {}
-                #filenamelistAvg = []
                 timelistAvg = []
             else:
                 if 'iterFinalSample' not in G.attributes():
@@ -4488,13 +4382,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
         if init:
             self._t = 0.0
             BackUpTStart=0.1*time
-            #BackUpTStart=1.1*time
-            #BackUpTStart=0.005*time
-            #BackUpTStart=0.0005*time
             BackUpT=0.1*time
-            #BackUpT=1.1*time
-            #BackUpT=0.005*time
-            #BackUpT=0.0005*time
             BackUpCounter=0
         else:
             if 'dtFinal' not in G.attributes():
@@ -4505,7 +4393,6 @@ class LinearSystemHtdTotFixedDTTrack(object):
                 G['iterFinalSample'] = 0
             self._t = G['dtFinal']
             self._tSample=G['iterFinalSample']
-            #BackUpT=0.1*time
             BackUpT=0.05*time
             print('Simulation starts at')
             print(self._t)
@@ -4531,11 +4418,11 @@ class LinearSystemHtdTotFixedDTTrack(object):
                 break
             iteration += 1
             start_time=ttime.time()
-            self._update_eff_resistance_and_LS(None, self._vertexUpdate)
+            self._update_eff_resistance_and_LS(self._vertexUpdate)
             print('Matrix updated')
             self._solve(method, **kwargs)
             print('Matrix solved')
-            self._G.vs['pressure'] = deepcopy(self._x)
+            self._G.vs['pressure'] = self._x[:]
             print('Pressure copied')
             self._update_flow_and_velocity()
             print('Flow updated')
@@ -4602,7 +4489,6 @@ class LinearSystemHtdTotFixedDTTrack(object):
                             G['rbcsMovedPerEdge']=self._rbcsMovedPerEdge
                             G['edgesMovedRBCs']=self._edgesWithMovedRBCs
                             G['rbcMovedAll']=self._rbcMoveAll
-                        #G['spacing']=self._spacing
                         filename1='sampledict_BackUp_'+str(BackUpCounter)+'.pkl'
                         filename2='G_BackUp'+str(BackUpCounter)+'.pkl'
                         self._sample_average()
@@ -4658,9 +4544,9 @@ class LinearSystemHtdTotFixedDTTrack(object):
         print("Execution Time:")
         print(ttime.time()-start_timeTot, "seconds")
 
-        self._update_eff_resistance_and_LS(None, None)
+        self._update_eff_resistance_and_LS(None)
         self._solve(method, **kwargs)
-        self._G.vs['pressure'] = deepcopy(self._x)
+        self._G.vs['pressure'] = self._x[:]
         print('Pressure copied')
         self._update_flow_and_velocity()
         self._update_flow_sign()
@@ -4683,7 +4569,6 @@ class LinearSystemHtdTotFixedDTTrack(object):
         G['trackRBCsEdges']=self._trackRBCsEdges
         G['trackRBCsWhichLeft']=self._trackRBCsWhichLeft
         G['RBCindexCurrent']=self._RBCindexCurrent
-        #G['spacing']=self._spacing
         filename1='sampledict_BackUp_'+str(BackUpCounter)+'.pkl'
         filename2='G_BackUp'+str(BackUpCounter)+'.pkl'
         #if doPlotting:
@@ -4702,24 +4587,9 @@ class LinearSystemHtdTotFixedDTTrack(object):
                 v['pressure']=v['pressure']/self._scaleToDef
             self._sample_average()
             g_output.write_pkl(self._sampledict,filename1)
-	    #g_output.write_pkl(self._transitTimeDict, 'TransitTimeDict.pkl')
-            #g_output.write_pvd_time_series('sequenceSampling.pvd',
-	    #				   filenamelistAvg, timelistAvg)
-        #G['spacing']=self._spacing
         vgm.write_pkl(G,filename2)
-        #if 'edgeIndex' not in self._RBCdict.keys():
-        #     self._RBCdict['edgeIndex']=self._allEdgesBox
         vgm.write_pkl(self._RBCdict,'RBCdict_BackUp'+str(BackUpCounter)+'.pkl')
         vgm.write_pkl(self._flowdict,'flowdict_BackUp'+str(BackUpCounter)+'.pkl')
-        # Since Physiology has been rewritten using Cython, it cannot be
-        # pickled. This class holds a Physiology object as a member and
-        # consequently connot be pickled either.
-        #g_output.write_pkl(self, 'LSHTD.pkl')
-        #self._timelist = timelist[:]
-        #self._filenamelist = filenamelist[:]
-	#self._filenamelistAvg = filenamelistAvg[:]
-	#self._timelistAvg = timelistAvg[:]
-
     #--------------------------------------------------------------------------
 
     def _plot_rbc(self, filename, tortuous=False):
@@ -4749,8 +4619,8 @@ class LinearSystemHtdTotFixedDTTrack(object):
             for e in G.es:
                 #points = e['points']
                 #nPoints = len(points)
-                rsource = G.vs[e.source]['r']
-                dvec = G.vs[e.target]['r'] - G.vs[e.source]['r']
+                rsource = G.vs[e['source']]['r']
+                dvec = G.vs[e.target]['r'] - G.vs[e['source']]['r']
                 length = e['length']
                 for rRBC in e['rRBC']:
                     #index = int(round(npoints * rRBC / length))
@@ -4831,7 +4701,6 @@ class LinearSystemHtdTotFixedDTTrack(object):
             sampledict[vprop + '_avg']=G.vs[vprop + '_avg']
         sampledict['averagedCount']=avCount + avCountNew
         G['averagedCount']=avCount + avCountNew
-        #g_output.write_vtp(G, sampleAvgFilename, False)
 
 
     #--------------------------------------------------------------------------
@@ -4893,7 +4762,6 @@ class LinearSystemHtdTotFixedDTTrack(object):
                 print('')
                 print(i)
                 print(G.vs['flowSum'][i])
-                #print(self._res[i])
                 print('FLOWERROR')
                 for j in G.adjacent(i):
                     print(G.es['flow'][j])

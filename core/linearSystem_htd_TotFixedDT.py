@@ -15,7 +15,6 @@ from __future__ import division
 import numpy as np
 from sys import stdout
 
-from copy import deepcopy
 from pyamg import smoothed_aggregation_solver, rootnode_solver, util
 import pyamg
 import scipy as sp
@@ -59,23 +58,12 @@ class LinearSystemHtdTotFixedDT(object):
                init: Assign initial conditions for RBCs (True) or keep old positions to
                         continue a simulation (False)
                **kwargs:
-               ht0: The initial hematocrit in the capillary bed. If G already 
-                    contains the relevant properties from an earlier simulation
-                    (i.e. rRBC edge property), ht0 can be set to 'current'.
-                    This will make use of the current RBC distribution as the
-                    initial hematocrit
-               hd0: The initial hematocrit in the capillary bed is calculated by the given
-                    initial discharge hematocrit. If G already contains the relevant 
-                    properties from an earlier simulation (i.e. rRBC edge property), hd0 
-                    can be set to 'current'. This will make use of the current RBC 
-                    distribution as the initial hematocrit
+               ht0: The initial hematocrit in the capillary bed. ht0 needs to be provided if init=1 
                plasmaViscosity: The dynamic plasma viscosity. If not provided,
                                 a literature value will be used.
                analyzeBifEvents: boolean if bifurcation events should be analyzed (Default = 0)
                innerDiam: boolean if inner or outer diamter of vessels is given in the graph 
                    (innerDiam = 1 --> inner diameter given) (Default = 0)
-               analyzeCapDil: edge index of dilated capillary should be given. Upstream divergent bifurcations
-                   will be analyzed
                species: 'rat', 'mouse' or 'human', default is 'rat'
         OUTPUT: None, however the following items are created:
                 self.A: Matrix A of the linear system, holding the conductance
@@ -87,26 +75,24 @@ class LinearSystemHtdTotFixedDT(object):
         self._P = Physiology(G['defaultUnits'])
         self._dThreshold = dThreshold
         self._invivo=invivo
-        nVertices = G.vcount()
-        self._b = zeros(nVertices)
-        self._x = zeros(nVertices)
-        self._A = lil_matrix((nVertices,nVertices),dtype=float)
+        self._b = zeros(G.vcount())
+        self._x = zeros(G.vcount())
+        self._A = lil_matrix((G.vcount(),G.vcount()),dtype=float)
         self._eps = finfo(float).eps * 1e4
+        #TODO those two are changed in evolve. depending if it is restarted or not. it would be more correct to do this here
         self._tPlot = 0.0
         self._tSample = 0.0
         self._filenamelist = []
         self._timelist = []
-        #self._filenamelistAvg = []
 	self._timelistAvg = []
         self._sampledict = {} 
-	#self._transitTimeDict = {}
 	self._init=init
         self._scaleToDef=vgm.units.scaling_factor_du('mmHg',G['defaultUnits'])
-        self._dtFix=0.0
         self._vertexUpdate=None
         self._edgeUpdate=None
         G.es['source']=[e.source for e in G.es]
         G.es['target']=[e.target for e in G.es]
+        G.es['countRBCs']=[0]*G.ecount()
         G.es['crosssection']=np.array([0.25*np.pi]*G.ecount())*np.array(G.es['diameter'])**2
         G.es['volume']=[e['crosssection']*e['length'] for e in G.es]
         adjacent=[]
@@ -137,14 +123,6 @@ class LinearSystemHtdTotFixedDT(object):
         else:
             self._innerDiam = 0
 
-        if kwargs.has_key('analyzeCapDil'):
-            self._capDil = kwargs['analyzeCapDil']
-            print('capDil')
-            print(self._capDil)
-            print(G.ecount())
-        else:
-            self._capDil = 0
-
         # Assure that both pBC and rBC edge properties are present:
         for key in ['pBC', 'rBC']:
             if not G.vs[0].attributes().has_key(key):
@@ -163,7 +141,7 @@ class LinearSystemHtdTotFixedDT(object):
                 del(G['edgesMovedRBCs'])
         # Set initial pressure and flow to zero:
 	if init:
-            G.vs['pressure']=zeros(nVertices) 
+            G.vs['pressure']=zeros(G.vcount()) 
             G.es['flow']=zeros(G.ecount())    
 
         G.vs['degree']=G.degree()
@@ -196,11 +174,8 @@ class LinearSystemHtdTotFixedDT(object):
         G.vs['isCap']=[False]*G.vcount()
         self._interfaceVertices=[]
         for i in xrange(G.vcount()):
-            #print(i)
             category=[]
             for j in adjacent[i]:
-                #print(j)
-                #print(G.es.attribute_names())
                 if G.es[int(j)]['diameter'] < dThreshold:
                     category.append(1)
                 else:
@@ -215,19 +190,11 @@ class LinearSystemHtdTotFixedDT(object):
 
         # Arterial-side inflow:
         if init:
-            if 'htdBC' in G.es.attribute_names() and 'httBC' not in G.es.attribute_names():
-                G.es['httBC']=[e['htdBC'] if e['htdBC'] == None else \
-                    self._P.discharge_to_tube_hematocrit(e['htdBC'],e['diameter'],invivo) for e in G.es()]
             if not 'httBC' in G.es.attribute_names():
                 for vi in G['av']:
                     for ei in G.adjacent(vi):
-                        G.es[ei]['httBC'] = self._P.tube_hematocrit(
-                                                G.es[ei]['diameter'], 'a')
+                        G.es[ei]['httBC'] = self._P.tube_hematocrit(G.es[ei]['diameter'], 'a')
 
-        #Convert tube hematocrit boundary condition to htdBC (in case it does not already exist)
-        #if not 'htdBC' in G.es.attribute_names():
-        #   G.es['htdBC']=[e['httBC'] if e['httBC'] == None else \
-        #        self._P.tube_to_discharge_hematocrit(e['httBC'],e['diameter'],invivo) for e in G.es()]
         print('Htt BC assigned')
 
         httBC_edges = G.es(httBC_ne=None).indices
@@ -241,26 +208,19 @@ class LinearSystemHtdTotFixedDT(object):
 
         # Assign initial RBC positions:
 	if init:
-            if kwargs.has_key('hd0'):
-                hd0=kwargs['hd0']
-                if hd0 == 'current':
-                    ht0=hd0
-                else:
-                    ht0='dummy'
-            if kwargs.has_key('ht0'):
+            if 'ht0' not in kwargs.keys():
+                print('ERROR no inital tube hematocrit given for distribution of RBCs')
+            else:
                 ht0=kwargs['ht0']
-            if ht0 != 'current':
-                for e in G.es:
-                    lrbc = e['minDist']
-                    Nmax = max(int(np.floor(e['nMax'])), 1)
-                    if e['httBC'] is not None:
-                        N = int(np.round(e['httBC'] * Nmax))
-                    else:
-                        if kwargs.has_key('hd0'):
-                            ht0=self._P.discharge_to_tube_hematocrit(hd0,e['diameter'],invivo)
-                        N = int(np.round(ht0 * Nmax))
-                    indices = sorted(np.random.permutation(Nmax)[:N])
-                    e['rRBC'] = np.array(indices) * lrbc + lrbc / 2.0
+            for e in G.es:
+                lrbc = e['minDist']
+                Nmax = max(int(np.floor(e['nMax'])), 1)
+                if e['httBC'] is not None:
+                    N = int(np.round(e['httBC'] * Nmax))
+                else:
+                    N = int(np.round(ht0 * Nmax))
+                indices = sorted(np.random.permutation(Nmax)[:N])
+                e['rRBC'] = np.array(indices) * lrbc + lrbc / 2.0
         print('Initial nRBC computed')    
         G.es['nRBC']=[len(e['rRBC']) for e in G.es]
 
@@ -287,11 +247,11 @@ class LinearSystemHtdTotFixedDT(object):
         for v in G.vs:
             if v['pBC'] != None:
                 v['pBC']=v['pBC']*self._scaleToDef
-        self._update_eff_resistance_and_LS(None, None)
+        self._update_eff_resistance_and_LS(None)
         print('Matrix created')
         self._solve('iterative2')
         print('Matrix solved')
-        self._G.vs['pressure'] = deepcopy(self._x)
+        self._G.vs['pressure'] = self._x[:]
         #Convert deaultUnits to 'pBC' ['mmHG']
         for v in G.vs:
             if v['pBC'] != None:
@@ -333,72 +293,6 @@ class LinearSystemHtdTotFixedDT(object):
         self._update_out_and_inflows_for_vertices()
         print('updated out and inflows')
 
-        #Find upstream divergent bifurcations
-        if self._capDil != 0:
-            Gdummy=deepcopy(G)
-            Gdummy.to_directed_flow_based()
-            e=Gdummy.es[self._capDil]
-            self._upstreamDivBifs=[]
-            self._upstreamAFeedBifs=[]
-            upstreamBifs=[]
-            paths=[]
-            newPaths=[]
-            direction='in'
-            upstreamBifs.append(e.source)
-            if Gdummy.vs['vType'][e.source]== 3:
-                self._upstreamDivBifs.append(e.source)
-            paths.append(upstreamBifs)
-            countDone = 0
-            print('Start at')
-            print(paths)
-            print(upstreamBifs)
-            print(self._upstreamDivBifs)
-            while len(self._upstreamDivBifs) < 3 and len(paths) != countDone:
-                countDone = 0
-                for path in paths:
-                    print('paths')
-                    print(path)
-                    print(self._upstreamDivBifs)
-                    print(G.vs[self._upstreamDivBifs]['vType'])
-                    print(Gdummy.neighbors(path[-1],type=direction))
-                    if Gdummy.neighbors(path[-1],type=direction) == []:
-                        newPaths.append(path)
-                        countDone += 1
-                    else:
-                        for neighbor in Gdummy.neighbors(path[-1],type=direction):
-                            #if neighbor not in path:
-                            newPaths.append(path + [neighbor])
-                            if Gdummy.vs['vType'][neighbor] == 3:
-                                self._upstreamDivBifs.append(neighbor)
-                            if Gdummy.vs['kind'][neighbor] == 'a':
-                                self._upstreamAFeedBifs.append(neighbor)
-                                countDone += 1
-                paths = newPaths
-                newPaths = []
-                if countDone == len(paths):
-                    print('countDone = len(paths)')
-                    break
-            print('Check Feeding Arteries')
-            print(self._upstreamAFeedBifs)
-            self._analyzeDivBifEvents=[]
-            self._DivBifEdges=[]
-            self._upstreamDivBifsCount = []
-            self._upstreamDivBifsNotDiv = []
-            for i in self._upstreamDivBifs:
-                self._upstreamDivBifsCount.append(0)
-                self._upstreamDivBifsNotDiv.append(0)
-                dummy=[]
-                dummy2=[]
-                for j in Gdummy.adjacent(i,'out'):
-                    dummy.append(j)
-                    dummy2.append(0)
-                self._DivBifEdges.append(dummy)
-                self._analyzeDivBifEvents.append(dummy2)
-            print('upstreamDivBifs')
-            print(self._upstreamDivBifs)
-            print(self._DivBifEdges)
-            del(Gdummy)
-
         #Calculate an estimated network turnover time (based on conditions at the beginning)
         flowsum=0
 
@@ -412,8 +306,6 @@ class LinearSystemHtdTotFixedDT(object):
         print(self._eps)
         stdout.write("\rEstimated network turnover time Ttau=%f        \n" % G['Ttau'])
 
-        #for e in self._G.es(flow_le=self._eps*1e6):
-        #    e['rRBC'] = []
             
     #--------------------------------------------------------------------------
 
@@ -425,13 +317,8 @@ class LinearSystemHtdTotFixedDT(object):
         OUTPUT: None, the edge properties 'resistance' and 'specificResistance'
                 are updated (or created).
         """
-        #mean_LD=0.28
         mean_LD=httBC
         std_LD=0.1*mean_LD
-        #std_LD=0.1*mean_LD
-        #if std_LD > 0.01:
-        #    std_LD = 0.01
-
         
         #PDF log-normal
         f_x = lambda x,mu,sigma: 1./(x*np.sqrt(2*np.pi)*sigma)*np.exp(-1*(np.log(x)-mu)**2/(2*sigma**2))
@@ -442,7 +329,7 @@ class LinearSystemHtdTotFixedDT(object):
         #f_mean integral dummy
         f_mean_LD_dummy = lambda z,mu,sigma: z*f_LD(z,mu,sigma)
         
-        ##calculate mean
+        #calculate mean
         f_mean_LD = lambda mu,sigma: quad(f_mean_LD_dummy,0,1,args=(mu,sigma))[0]
         f_mean_LD_Calc=np.vectorize(f_mean_LD)
         
@@ -529,9 +416,6 @@ class LinearSystemHtdTotFixedDT(object):
                 not exist previously)
         """
         G = self._G
-#        G.es['lpg'] = np.array(G.es['specificResistance']) * \
-#                      np.array(G.es['flow']) * np.array(G.es['resistance']) / \
-#                      np.array(G.es['effResistance'])
         G.es['lpg'] = np.array(G.es['specificResistance']) * \
                       np.array(G.es['flow'])
 
@@ -976,23 +860,9 @@ class LinearSystemHtdTotFixedDT(object):
         self._G=run_faster.update_flow_and_v(self._G,self._invivo,vfList,vrbc)
         G= self._G
 
-        #G = self._G
-        #invivo=self._invivo
-        #vf = self._P.velocity_factor
-        #pi=np.pi
-        #G.es['flow'] = np.array([abs(G.vs[e.source]['pressure'] -                                           
-        #                    G.vs[e.target]['pressure']) /res                        
-        #                    for e,res in zip(G.es,G.es['effResistance'])])
-        # RBC velocity is not defined if tube_ht==0, using plasma velocity
-        # instead:
-        #G.es['v'] = [4 * flow * vf(d, invivo, tube_ht=htt) /                  
-        #            (pi * d**2) if htt > 0 else                                
-        #            4 * flow / (pi * d**2)                                     
-         #           for flow,d,htt in zip(G.es['flow'],G.es['diameter'],G.es['htt'])]
-
     #--------------------------------------------------------------------------
 
-    def _update_eff_resistance_and_LS(self, newGraph=None, vertex=None):
+    def _update_eff_resistance_and_LS(self, vertex=None):
         """Constructs the linear system A x = b where the matrix A contains the
         conductance information of the vascular graph, the vector b specifies
         the boundary conditions and the vector x holds the pressures at the
@@ -1004,16 +874,13 @@ class LinearSystemHtdTotFixedDT(object):
         [conductance] and [conductance*pressure] otherwise, the latter being
         rBCs. This has the advantage that no re-indexing is required as the
         matrices contain all vertices.
-        INPUT: newGraph: Vascular graph in iGraph format to replace the
-                         previous self.G. (Optional, default=None.)
+        INPUT: 
         OUTPUT: A: Matrix A of the linear system, holding the conductance
                    information.
                 b: Vector b of the linear system, holding the boundary
                    conditions.
         """
 
-        #if newGraph is not None:
-        #    self._G = newGraph
 
         G = self._G
         P = self._P
@@ -1098,12 +965,6 @@ class LinearSystemHtdTotFixedDT(object):
         dt = self._dt # Time to propagate RBCs with current velocity.
         eps=self._eps
         Physiol = self._P
-        if self._capDil != 0:
-            upstreamDivBifs = self._upstreamDivBifs
-            divBifEdges=self._DivBifEdges
-            analyzeDivBifEvents=self._analyzeDivBifEvents
-            upstreamDivBifsCount=self._upstreamDivBifsCount
-            upstreamDivBifsNotDiv=self._upstreamDivBifsNotDiv
 	#No flow Edges are not considered for the propagation of RBCs
         edgeList0=G.es(noFlow_eq=0).indices
         if self._analyzeBifEvents:
@@ -1128,9 +989,9 @@ class LinearSystemHtdTotFixedDT(object):
             sign=e['sign']
             #Get bifurcation vertex
             if sign == 1:
-                vi=e.target
+                vi=e['target']
             else:
-                vi=e.source
+                vi=e['source']
             edgesInvolved=G.adjacent(vi)
             nRBCSumBefore = np.sum(G.es[edgesInvolved]['nRBC'])
             overshootsNo=0 #Reset - Number of overshoots acutally taking place (considers possible number of bifurcation events)
@@ -1152,19 +1013,10 @@ class LinearSystemHtdTotFixedDT(object):
                     nRBC=len(e['rRBC'])
                     if sign == 1.0:
                         if e['rRBC'][-1] > e['length']:
-                            for i,j in enumerate(e['rRBC'][::-1]):
-                                if j > e['length']:
-                                    bifRBCsIndex.append(nRBC-1-i)
-                                else:
-                                    break
-                        bifRBCsIndex=bifRBCsIndex[::-1]
+                            bifRBCsIndex=range((np.array(e['rRBC'])>e['length']).tolist().index(True),nRBC)
                     else:
                         if e['rRBC'][0] < 0:
-                            for i,j in enumerate(e['rRBC']):
-                                if j < 0:
-                                    bifRBCsIndex.append(i)
-                                else:
-                                    break
+                            bifRBCsIndex=range(0,(np.array(e['rRBC'])<0.).tolist().index(False))
                     noBifEvents=len(bifRBCsIndex)
                 else:
                     noBifEvents = 0
@@ -1178,8 +1030,8 @@ class LinearSystemHtdTotFixedDT(object):
                     if G.vs[vi]['vType'] == 2:
                         overshootsNo=noBifEvents
                         e['rRBC']=[e['rRBC'][:-noBifEvents] if sign == 1.0 else e['rRBC'][noBifEvents::]][0]
-                        vertexUpdate.append(e.target)
-                        vertexUpdate.append(e.source)
+                        vertexUpdate.append(e['target'])
+                        vertexUpdate.append(e['source'])
                         edgeUpdate.append(ei)
             #-------------------------------------------------------------------------------------------
                     #if vertex is connecting vertex
@@ -1271,6 +1123,7 @@ class LinearSystemHtdTotFixedDT(object):
                                 position=position[-1*overshootsNo::]
                             #Add rbcs to new Edge
                             if overshootsNo > 0:
+                                oe['countRBCs']+=len(position)
                                 if oe['sign'] == 1.0:
                                     oe['rRBC']=np.concatenate([position, oe['rRBC']])
                                 else:
@@ -2363,10 +2216,10 @@ class LinearSystemHtdTotFixedDT(object):
                                                                     if len(oe3['rRBC']) > 0:
                                                                         if position3[index3]-oe3['rRBC'][-1] < oe3['minDist']:
                                                                             position3[index3]=oe3['rRBC'][-1]+oe3['minDist']
-                                                                        else:
-                                                                        #Avoid overshooting whole vessels
-                                                                            if position3[index3] < 0:
-                                                                                position3[index3]=0
+                                                                    else:
+                                                                    #Avoid overshooting whole vessels
+                                                                        if position3[index3] < 0:
+                                                                            position3[index3]=0
                                                                 positionPref3.append(position3[index3])
                                                                 counterPref3.append(index)
                                                                 countPref3 += 1
@@ -2678,17 +2531,20 @@ class LinearSystemHtdTotFixedDT(object):
                                     if countPref2+countPref1 != overshootsNo:
                                         overshootsNo = countPref2+countPref1
                             #add RBCs to outEPref1
+                            oe['countRBCs']+=len(positionPref1)
                             if oe['sign'] == 1.0:
                                 oe['rRBC']=np.concatenate([positionPref1[::-1], oe['rRBC']])
                             else:
                                 oe['rRBC']=np.concatenate([oe['rRBC'],positionPref1])
                             #Add rbcs to outEPref2       
+                            oe2['countRBCs']+=len(positionPref2)
                             if oe2['sign'] == 1.0:
                                 oe2['rRBC']=np.concatenate([positionPref2[::-1], oe2['rRBC']])
                             else:
                                 oe2['rRBC']=np.concatenate([oe2['rRBC'],positionPref2])
                             if len(outEdges) >2:
                             #Add rbcs to outEPref3       
+                                oe3['countRBCs']+=len(positionPref3)
                                 if oe3['sign'] == 1.0:
                                     oe3['rRBC']=np.concatenate([positionPref3[::-1], oe3['rRBC']])
                                 else:
@@ -2924,6 +2780,7 @@ class LinearSystemHtdTotFixedDT(object):
                                 position=position[i::]
                                 inEdge=inEdge[i::]
                             #Add rbcs to outE
+                            oe['countRBCs']+=len(position)
                             if oe['sign'] == 1.0:
                                 oe['rRBC']=np.concatenate([position, oe['rRBC']])
                             else:
@@ -3465,8 +3322,6 @@ class LinearSystemHtdTotFixedDT(object):
                                     index=-1*(i+1)
                                     index1=-1*(i+1) if oe['sign'] == 1.0 else i
                                     index2=-1*(i+1) if oe2['sign'] == 1.0 else i
-                                    #posRBC1=position1[index1] if oe['sign'] == 1 else oe['length']-position1[index1]
-                                    #posRBC2=position2[index2] if oe2['sign'] == 1 else oe2['length']-position2[index2]
                                     #check if RBC still fits into Prefered OutE
                                     if posNoBifEventsPref > countPref1 and pref1Full == 0:
                                         #Check if there are RBCs present in outEPref
@@ -3741,11 +3596,13 @@ class LinearSystemHtdTotFixedDT(object):
                                 if countPref2+countPref1 != overshootsNo:
                                     overshootsNo = countPref2+countPref1
                             #Add rbcs to outEPref
+                            oe['countRBCs']+=len(positionPref1)
                             if oe['sign'] == 1.0:
                                 oe['rRBC']=np.concatenate([positionPref1[::-1], oe['rRBC']])
                             else:
                                 oe['rRBC']=np.concatenate([oe['rRBC'],positionPref1])
                             #Add rbcs to outEPref2       
+                            oe2['countRBCs']+=len(positionPref2)
                             if oe2['sign'] == 1.0:
                                 oe2['rRBC']=np.concatenate([positionPref2[::-1], oe2['rRBC']])
                             else:
@@ -3847,7 +3704,6 @@ class LinearSystemHtdTotFixedDT(object):
                 length = e['length']
                 nMaxNew=e['nMax']-len(e['rRBC'])
                 if len(e['rRBC']) > 0:
-                    #if cum_length > distToFirst:
                     posFirst=e['rRBC'][0] if e['sign']==1.0 else e['length']-e['rRBC'][-1]
                     e['posFirst_last']=posFirst
                     e['v_last'] = e['v']
@@ -3858,7 +3714,6 @@ class LinearSystemHtdTotFixedDT(object):
                     e['posFirst_last']=posFirst
                     if e['v'] > e['v_last']:
                         e['v_last']=e['v']
-                    #e['v_last']=e['v']
                 while cum_length >= lrbc and nMaxNew > 0:
                     if len(e['keep_rbcs']) != 0:
                         if posFirst - e['keep_rbcs'][0] >= 0:
@@ -3872,7 +3727,6 @@ class LinearSystemHtdTotFixedDT(object):
                             cum_length = posFirst
                             e['keep_rbcs']=[]
                             e['posFirst_last']=posFirst
-                            #e['v_last']=e['v']
                         else:
                             break
                     else:
@@ -3889,10 +3743,8 @@ class LinearSystemHtdTotFixedDT(object):
                             nMaxNew += -1
                             cum_length = posFirst
                             e['posFirst_last']=posFirst
-                            #e['v_last']=e['v']
                         else:
                             e['keep_rbcs']=[spacing]
-                            #e['v_last']=e['v']
                             if len(rRBC) == 0:
                                 e['posFirst_last']=posFirst
                             else:
@@ -3906,13 +3758,13 @@ class LinearSystemHtdTotFixedDT(object):
                 if len(rRBC) >= 1.:
                     if e['sign'] == 1:
                         e['rRBC'] = np.concatenate([rRBC[::-1], e['rRBC']])
-                        vertexUpdate.append(e.target)
-                        vertexUpdate.append(e.source)
+                        vertexUpdate.append(e['target'])
+                        vertexUpdate.append(e['source'])
                         edgeUpdate.append(ei)
                     else:
                         e['rRBC'] = np.concatenate([e['rRBC'], length-rRBC])
-                        vertexUpdate.append(e.target)
-                        vertexUpdate.append(e.source)
+                        vertexUpdate.append(e['target'])
+                        vertexUpdate.append(e['source'])
                         edgeUpdate.append(ei)
             if noBifEvents > 0:
                 if G.vs[vi]['vType'] == 6 or G.vs[vi]['vType'] == 4:
@@ -3949,11 +3801,9 @@ class LinearSystemHtdTotFixedDT(object):
                                     cum_length = posFirst
                                     e2['keep_rbcs']=[]
                                     e2['posFirst_last']=posFirst
-                                    #e2['v_last']=e2['v']
                                 else:
                                     if len(e2['rRBC']) > 0:
                                         e2['posFirst_last'] = posFirst
-                                        #e2['v_last']=e2['v']
                                     break
                             else:
                                 #number of RBCs randomly chosen to average htt
@@ -3969,10 +3819,8 @@ class LinearSystemHtdTotFixedDT(object):
                                     nMaxNew += -1
                                     cum_length = posFirst
                                     e2['posFirst_last']=posFirst
-                                    #e2['v_last']=e2['v']
                                 else:
                                     e2['keep_rbcs']=[spacing]
-                                    #e2['v_last']=e2['v']
                                     if len(rRBC2) == 0:
                                         e2['posFirst_last']=posFirst
                                     else:
@@ -3986,13 +3834,13 @@ class LinearSystemHtdTotFixedDT(object):
                         if len(rRBC2) >= 1.:
                             if e2['sign'] == 1:
                                 e2['rRBC'] = np.concatenate([rRBC2[::-1], e2['rRBC']])
-                                vertexUpdate.append(e2.target)
-                                vertexUpdate.append(e2.source)
+                                vertexUpdate.append(e2['target'])
+                                vertexUpdate.append(e2['source'])
                                 edgeUpdate.append(e2.index)
                             else:
                                 e2['rRBC'] = np.concatenate([e2['rRBC'], length-rRBC2])
-                                vertexUpdate.append(e2.target)
-                                vertexUpdate.append(e2.source)
+                                vertexUpdate.append(e2['target'])
+                                vertexUpdate.append(e2['source'])
                                 edgeUpdate.append(e2.index)
                     if G.vs[vi]['vType']==4 and boolTrifurcation:
                         #Check if httBC exists
@@ -4028,11 +3876,9 @@ class LinearSystemHtdTotFixedDT(object):
                                         cum_length = posFirst
                                         e3['keep_rbcs']=[]
                                         e3['posFirst_last']=posFirst
-                                        #e3['v_last']=e3['v']
                                     else:
                                         if len(e3['rRBC']) > 0:
                                             e3['posFirst_last'] = posFirst
-                                            #e3['v_last']=e3['v']
                                         break
                                 else:
                                     #number of RBCs randomly chosen to average htt
@@ -4048,10 +3894,8 @@ class LinearSystemHtdTotFixedDT(object):
                                         nMaxNew += -1
                                         cum_length = posFirst
                                         e3['posFirst_last']=posFirst
-                                        #e3['v_last']=e3['v']
                                     else:
                                         e3['keep_rbcs']=[spacing]
-                                        #e3['v_last']=e3['v']
                                         if len(rRBC3) == 0:
                                             e3['posFirst_last']=posFirst
                                         else:
@@ -4065,13 +3909,13 @@ class LinearSystemHtdTotFixedDT(object):
                             if len(rRBC3) >= 1.:
                                 if e3['sign'] == 1:
                                     e3['rRBC'] = np.concatenate([rRBC3[::-1], e3['rRBC']])
-                                    vertexUpdate.append(e3.target)
-                                    vertexUpdate.append(e3.source)
+                                    vertexUpdate.append(e3['target'])
+                                    vertexUpdate.append(e3['source'])
                                     edgeUpdate.append(e3.index)
                                 else:
                                     e3['rRBC'] = np.concatenate([e3['rRBC'], length-rRBC3])
-                                    vertexUpdate.append(e3.target)
-                                    vertexUpdate.append(e3.source)
+                                    vertexUpdate.append(e3['target'])
+                                    vertexUpdate.append(e3['source'])
                                     edgeUpdate.append(e3.index)
             if noBifEvents != 0 or boolHttEdge == 1 or boolHttEdge2==1 or boolHttEdge3==1:
                 nRBCSumAfter=0
@@ -4107,23 +3951,8 @@ class LinearSystemHtdTotFixedDT(object):
                         if edge['rRBC'][j] > edge['rRBC'][j+1] or edge['rRBC'][j+1]-edge['rRBC'][j] < edge['minDist']-100*eps:
                             print('BIGERROR BEGINNING END 3')
             if overshootsNo != 0:
-                if self._capDil != 0:
-                    if vi in upstreamDivBifs:
-                        vIndex = upstreamDivBifs.index(vi)
-                        upstreamDivBifsCount[vIndex] +=1
-                        if G.vs[vi]['vType']==3:
-                            #WARNING this my lead to errors if the number of divergent bifurcations changes during simulation
-                            index2=divBifEdges[vIndex].index(oe.index)
-                            analyzeDivBifEvents[vIndex][index2] += len(positionPref1)
-                            index2=divBifEdges[vIndex].index(oe2.index)
-                            analyzeDivBifEvents[vIndex][index2] += len(positionPref2)
-                            if len(divBifEdges[vIndex]) > 2:
-                                index2=divBifEdges[vIndex].index(oe3.index)
-                                analyzeDivBifEvents[vIndex][index2] += len(positionPref3)
-                        else:
-                            upstreamDivBifsNotDiv[vIndex] += 1
-                vertexUpdate.append(e.target)
-                vertexUpdate.append(e.source)
+                vertexUpdate.append(e['target'])
+                vertexUpdate.append(e['source'])
                 for i in edgesInvolved:
                     edgeUpdate.append(i)
                 if boolHttEdge:
@@ -4175,12 +4004,6 @@ class LinearSystemHtdTotFixedDT(object):
         self._vertexUpdate=np.unique(vertexUpdate)
         edgeUpdate=np.unique(edgeUpdate)
         self._edgeUpdate=edgeUpdate.tolist()
-        if self._capDil != 0:
-            self._upstreamDivBifs = upstreamDivBifs
-            self._DivBifEdges=divBifEdges
-            self._analyzeDivBifEvents=analyzeDivBifEvents
-            self._upstreamDivBifsCount=upstreamDivBifsCount
-            self._upstreamDivBifsNotDiv=upstreamDivBifsNotDiv
         G.es['nRBC'] = [len(e['rRBC']) for e in G.es]
         if self._analyzeBifEvents:
             self._rbcsMovedPerEdge.append(rbcsMovedPerEdge)
@@ -4221,12 +4044,11 @@ class LinearSystemHtdTotFixedDT(object):
          OUTPUT: None (files are written to disk)
         """
         G=self._G
-        tPlot = self._tPlot # deepcopy, since type is float
-        tSample = self._tSample # deepcopy, since type is float
+        tPlot = self._tPlot 
+        tSample = self._tSample 
         filenamelist = self._filenamelist
         self._dt=dtfix
         timelist = self._timelist
-	#filenamelistAvg = self._filenamelistAvg
 	timelistAvg = self._timelistAvg
         init=self._init
 
@@ -4254,8 +4076,6 @@ class LinearSystemHtdTotFixedDT(object):
             if init == True:
                 self._tSample = 0.0
                 self._sampledict = {}
-                #self._transitTimeDict = {}
-                #filenamelistAvg = []
                 timelistAvg = []
             else:
                 if 'iterFinalSample' not in G.attributes():
@@ -4304,17 +4124,11 @@ class LinearSystemHtdTotFixedDT(object):
                 break
             iteration += 1
             start_time=ttime.time()
-            #self._effResistance.append(G.es['effResistance'])
-            #self._htt.append(G.es['htt'])
-            self._update_eff_resistance_and_LS(None, self._vertexUpdate)
-            #self._update_eff_resistance_and_LS(None, None)
-            #self._effResistance.append(G.es['effResistance'])
-            #self._htt.append(G.es['htt'])
-            #self._update_eff_resistance_and_LS(None, None)
+            self._update_eff_resistance_and_LS(self._vertexUpdate)
             print('Matrix updated')
             self._solve(method, **kwargs)
             print('Matrix solved')
-            self._G.vs['pressure'] = deepcopy(self._x)
+            self._G.vs['pressure'] = self._x[:]
             print('Pressure copied')
             self._update_flow_and_velocity()
             print('Flow updated')
@@ -4379,14 +4193,6 @@ class LinearSystemHtdTotFixedDT(object):
                             G['rbcMovedAll']=self._rbcMoveAll
                         filename1='sampledict_BackUp_'+str(BackUpCounter)+'.pkl'
                         filename2='G_BackUp'+str(BackUpCounter)+'.pkl'
-                        if self._capDil != 0:
-                            analyzeDivBifs={}
-                            analyzeDivBifs['upstreamDivBifs']=self._upstreamDivBifs
-                            analyzeDivBifs['divBifEdges']=self._DivBifEdges
-                            analyzeDivBifs['analyzeDivBifEvents']=self._analyzeDivBifEvents
-                            analyzeDivBifs['upstreamDivBifsCount']=self._upstreamDivBifsCount
-                            analyzeDivBifs['upstreamDivBifsNotDiv']=self._upstreamDivBifsNotDiv
-                            vgm.write_pkl(analyzeDivBifs,'analyzeDivBifs_BackUp'+str(BackUpCounter)+'.pkl')
                         self._sample_average()
                         print(filename1)
                         print(filename2)
@@ -4397,8 +4203,6 @@ class LinearSystemHtdTotFixedDT(object):
                             v['pressure']=v['pressure']/self._scaleToDef
                         g_output.write_pkl(self._sampledict,filename1)
                         vgm.write_pkl(G,filename2)
-                        #vgm.write_pkl(self._effResistance,'effResistanceTest.pkl')
-                        #vgm.write_pkl(self._htt,'httTest.pkl')
                         self._sampledict = {}
                         self._sampledict['averagedCount']=G['averagedCount']
                         #Convert 'pBC' ['mmHG'] to default Units
@@ -4414,9 +4218,6 @@ class LinearSystemHtdTotFixedDT(object):
             self._propagate_rbc()
             print('RBCs propagated')
             self._update_hematocrit(self._edgeUpdate)
-            #self._update_hematocrit(None)
-            #self._effResistance.append(G.es['effResistance'])
-            #self._htt.append(G.es['htt'])
             print('Hematocrit updated')
             tPlot = tPlot + self._dt
             self._tPlot = tPlot
@@ -4437,9 +4238,9 @@ class LinearSystemHtdTotFixedDT(object):
         print("Execution Time:")
         print(ttime.time()-start_timeTot, "seconds")
 
-        self._update_eff_resistance_and_LS(None, None)
+        self._update_eff_resistance_and_LS(None)
         self._solve(method, **kwargs)
-        self._G.vs['pressure'] = deepcopy(self._x)
+        self._G.vs['pressure'] = self._x[:]
         print('Pressure copied')
         self._update_flow_and_velocity()
         self._update_flow_sign()
@@ -4460,14 +4261,6 @@ class LinearSystemHtdTotFixedDT(object):
         G['BackUpCounter']=BackUpCounter
         filename1='sampledict_BackUp_'+str(BackUpCounter)+'.pkl'
         filename2='G_BackUp'+str(BackUpCounter)+'.pkl'
-        if self._capDil != 0:
-            analyzeDivBifs={}
-            analyzeDivBifs['upstreamDivBifs']=self._upstreamDivBifs
-            analyzeDivBifs['divBifEdges']=self._DivBifEdges
-            analyzeDivBifs['analyzeDivBifEvents']=self._analyzeDivBifEvents
-            analyzeDivBifs['upstreamDivBifsCount']=self._upstreamDivBifsCount
-            analyzeDivBifs['upstreamDivBifsNotDiv']=self._upstreamDivBifsNotDiv
-            vgm.write_pkl(analyzeDivBifs,'analyzeDivBifs_BackUp'+str(BackUpCounter)+'.pkl')
         #if doPlotting:
         #    filename= 'iter_'+str(int(round(tPlot+1)))+'.vtp'
         #    filenamelist.append(filename)
@@ -4485,19 +4278,8 @@ class LinearSystemHtdTotFixedDT(object):
             self._sample_average()
             g_output.write_pkl(self._sampledict, 'sampledict.pkl')
             g_output.write_pkl(self._sampledict,filename1)
-	    #g_output.write_pkl(self._transitTimeDict, 'TransitTimeDict.pkl')
-            #g_output.write_pvd_time_series('sequenceSampling.pvd',
-	    #				   filenamelistAvg, timelistAvg)
         vgm.write_pkl(G, 'G_final.pkl')
         vgm.write_pkl(G,filename2)
-        # Since Physiology has been rewritten using Cython, it cannot be
-        # pickled. This class holds a Physiology object as a member and
-        # consequently connot be pickled either.
-        #g_output.write_pkl(self, 'LSHTD.pkl')
-        #self._timelist = timelist[:]
-        #self._filenamelist = filenamelist[:]
-	#self._filenamelistAvg = filenamelistAvg[:]
-	#self._timelistAvg = timelistAvg[:]
 
     #--------------------------------------------------------------------------
 
@@ -4528,8 +4310,8 @@ class LinearSystemHtdTotFixedDT(object):
             for e in G.es:
                 #points = e['points']
                 #nPoints = len(points)
-                rsource = G.vs[e.source]['r']
-                dvec = G.vs[e.target]['r'] - G.vs[e.source]['r']
+                rsource = G.vs[e['source']]['r']
+                dvec = G.vs[e['target']]['r'] - G.vs[e['source']]['r']
                 length = e['length']
                 for rRBC in e['rRBC']:
                     #index = int(round(npoints * rRBC / length))
@@ -4610,7 +4392,6 @@ class LinearSystemHtdTotFixedDT(object):
             sampledict[vprop + '_avg']=G.vs[vprop + '_avg']
         sampledict['averagedCount']=avCount + avCountNew
         G['averagedCount']=avCount + avCountNew
-        #g_output.write_vtp(G, sampleAvgFilename, False)
 
 
     #--------------------------------------------------------------------------
@@ -4674,7 +4455,6 @@ class LinearSystemHtdTotFixedDT(object):
                 print('')
                 print(i)
                 print(G.vs['flowSum'][i])
-                #print(self._res[i])
                 print('FLOWERROR')
                 for j in G.adjacent(i):
                     print(G.es['flow'][j])
