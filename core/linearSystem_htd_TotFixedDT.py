@@ -1372,9 +1372,6 @@ class LinearSystemHtdTotFixedDT(object):
                                 positionPref2=[]
                                 positionPref1=[]
                                 last=3
-                                counterPref3=[]
-                                counterPref2=[]
-                                counterPref1=[]
                                 for i in xrange(overshootsNo):
                                     index=-1*(i+1) if sign == 1.0 else i
                                     index1=-1*(i+1) if oe['sign'] == 1.0 else i
@@ -1408,7 +1405,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                             positionPref1.append(position1[index1])
                                             else:
                                                 positionPref1.append(position1[index1])
-                                            counterPref1.append(index)
                                             countNo1 += 1
                                             last = 1
                                         else: 
@@ -1438,7 +1434,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                 positionPref2.append(position2[index2])
                                                 else:
                                                     positionPref2.append(position2[index2])
-                                                counterPref2.append(index)
                                                 countNo2 += 1
                                                 last = 2
                                             elif countNo3 < overshootsNo3:
@@ -1467,7 +1462,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                 positionPref3.append(position3[index3])
                                                 else:
                                                     positionPref3.append(position3[index3])
-                                                counterPref3.append(index)
                                                 countNo3 += 1
                                                 last = 3
                                             else:
@@ -1499,7 +1493,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                             positionPref2.append(position2[index2])
                                             else:
                                                 positionPref2.append(position2[index2])
-                                            counterPref2.append(index)
                                             countNo2 += 1
                                             last = 2
                                         else: 
@@ -1529,7 +1522,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                 positionPref3.append(position3[index3])
                                                 else:
                                                     positionPref3.append(position3[index3])
-                                                counterPref3.append(index)
                                                 countNo3 += 1
                                                 last = 3
                                             elif countNo1 < overshootsNo1:
@@ -1558,7 +1550,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                 positionPref1.append(position1[index1])
                                                 else:
                                                     positionPref1.append(position1[index1])
-                                                counterPref1.append(index)
                                                 countNo1 += 1
                                                 last = 1
                                             else:
@@ -1590,7 +1581,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                             positionPref3.append(position3[index3])
                                             else:
                                                 positionPref3.append(position3[index3])
-                                            counterPref3.append(index)
                                             countNo3 += 1
                                             last = 3
                                         else: 
@@ -1620,7 +1610,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                 positionPref1.append(position1[index1])
                                                 else:
                                                     positionPref1.append(position1[index1])
-                                                counterPref1.append(index)
                                                 countNo1 += 1
                                                 last = 1
                                             elif countNo2 < overshootsNo2:
@@ -1649,7 +1638,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                 positionPref2.append(position2[index2])
                                                 else:
                                                     positionPref2.append(position2[index2])
-                                                counterPref2.append(index)
                                                 countNo2 += 1
                                                 last = 2
                                             else:
@@ -1779,9 +1767,6 @@ class LinearSystemHtdTotFixedDT(object):
                                 positionPref3=[]
                                 positionPref2=[]
                                 positionPref1=[]
-                                counterPref3=[]
-                                counterPref2=[]
-                                counterPref1=[]
                                 #number of RBCs in the Edges
                                 countPref1=0
                                 countPref2=0
@@ -1887,7 +1872,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                                     position1[index1]=positionPref1[-1]-oe['minDist']
                                                                                     if position1[index1] > 0:
                                                                                         positionPref1.append(position1[index1])
-                                                                                        counterPref1.append(index)
                                                                                         countPref1 += 1
                                                                                     else:
                                                                                         print('WARNING PROPAGATE RBC has been pushed outside SHOULD NOT HAPPEN 1')
@@ -1895,7 +1879,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                                     position1[index1]=positionPref1[-1]+oe['minDist']
                                                                                     if position1[index1] < oe['length']:
                                                                                         positionPref1.append(position1[index1])
-                                                                                        counterPref1.append(index)
                                                                                         countPref1 += 1
                                                                                     else:
                                                                                         print('WARNING PROPAGATE RBC has been pushed outside SHOULD NOT HAPPEN 2')
@@ -1904,7 +1887,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                                     position2[index2]=positionPref2[-1]-oe2['minDist']
                                                                                     if position2[index2] > 0:
                                                                                         positionPref2.append(position2[index2])
-                                                                                        counterPref2.append(index)
                                                                                         countPref2 += 1
                                                                                     else:
                                                                                         print('WARNING PROPAGATE  RBC has been pushed outside SHOULD NOT HAPPEN 3')
@@ -1912,7 +1894,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                                     position2[index2]=positionPref2[-1]+oe2['minDist']
                                                                                     if position2[index2] < oe2['length']:
                                                                                         positionPref2.append(position2[index2])
-                                                                                        counterPref2.append(index)
                                                                                         countPref2 += 1
                                                                                     else:
                                                                                         print('WARNING PROPAGATE RBC has been pushed outside SHOULD NOT HAPPEN 4')
@@ -1921,7 +1902,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                                     position3[index3]=positionPref3[-1]-oe3['minDist']
                                                                                     if position3[index3] > 0:
                                                                                         positionPref3.append(position3[index3])
-                                                                                        counterPref3.append(index)
                                                                                         countPref3 += 1
                                                                                     else:
                                                                                         print('WARNING PROPAGATE RBC has been pushed outside SHOULD NOT HAPPEN 5')
@@ -1929,14 +1909,12 @@ class LinearSystemHtdTotFixedDT(object):
                                                                                     position3[index3]=positionPref3[-1]+oe3['minDist']
                                                                                     if position3[index3] < oe3['length']:
                                                                                         positionPref3.append(position3[index3])
-                                                                                        counterPref3.append(index)
                                                                                         countPref3 += 1
                                                                                     else:
                                                                                         print('WARNING PROPAGATE RBC has been pushed outside SHOULD NOT HAPPEN 6')
                                                                         #There is enough space in outEdge 3
                                                                         else:
                                                                             positionPref3.append(position3[index3])
-                                                                            counterPref3.append(index)
                                                                             countPref3 += 1
                                                                     #No RBCs have been put in outEPref3 so far
                                                                     else:
@@ -1962,7 +1940,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                                 if position3[index3] < 0:
                                                                                     position3[index3]=0
                                                                         positionPref3.append(position3[index3])
-                                                                        counterPref3.append(index)
                                                                         countPref3 += 1
                                                                 #There is no spcae in the third outEdge anymore
                                                                 else:
@@ -1999,7 +1976,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                             position1[index1]=positionPref1[-1]-oe['minDist']
                                                                             if position1[index1] > 0:
                                                                                 positionPref1.append(position1[index1])
-                                                                                counterPref1.append(index)
                                                                                 countPref1 += 1
                                                                             else:
                                                                                 print('WARNING PROPAGATE RBC has been pushed outside SHOULD NOT HAPPEN 7')
@@ -2007,7 +1983,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                             position1[index1]=positionPref1[-1]+oe['minDist']
                                                                             if position1[index1] < oe['length']:
                                                                                 positionPref1.append(position1[index1])
-                                                                                counterPref1.append(index)
                                                                                 countPref1 += 1
                                                                             else:
                                                                                 print('WARNING PROPAGATE RBC has been pushed outside SHOULD NOT HAPPEN 8')
@@ -2016,7 +1991,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                             position2[index2]=positionPref2[-1]-oe2['minDist']
                                                                             if position2[index2] > 0:
                                                                                 positionPref2.append(position2[index2])
-                                                                                counterPref2.append(index)
                                                                                 countPref2 += 1
                                                                             else:
                                                                                 print('WARNING PROPAGATE RBC has been pushed outside SHOULD NOT HAPPEN 9')
@@ -2024,7 +1998,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                             position2[index2]=positionPref2[-1]+oe2['minDist']
                                                                             if position2[index2] < oe2['length']:
                                                                                 positionPref2.append(position2[index2])
-                                                                                counterPref2.append(index)
                                                                                 countPref2 += 1
                                                                             else:
                                                                                 print('WARNING PROPAGATE RBC has been pushed outside SHOULD NOT HAPPEN 10')
@@ -2064,7 +2037,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                         position1[index1]=positionPref1[-1]-oe['minDist']
                                                                         if position1[index1] > 0:
                                                                             positionPref1.append(position1[index1])
-                                                                            counterPref1.append(index)
                                                                             countPref1 += 1
                                                                         else:
                                                                             print('WARNING PROPAGATE RBC has been pushed outside SHOULD NOT HAPPEN 11')
@@ -2072,7 +2044,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                         position1[index1]=positionPref1[-1]+oe['minDist']
                                                                         if position1[index1] < oe['length']:
                                                                             positionPref1.append(position1[index1])
-                                                                            counterPref1.append(index)
                                                                             countPref1 += 1
                                                                         else:
                                                                             print('WARNING PROPAGATE RBC has been pushed outside SHOULD NOT HAPPEN 12')
@@ -2081,7 +2052,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                         position2[index2]=positionPref2[-1]-oe2['minDist']
                                                                         if position2[index2] > 0:
                                                                             positionPref2.append(position2[index2])
-                                                                            counterPref2.append(index)
                                                                             countPref2 += 1
                                                                         else:
                                                                             print('WARNING PROPAGATE RBC has been pushed outside SHOULD NOT HAPPEN 13')
@@ -2089,14 +2059,12 @@ class LinearSystemHtdTotFixedDT(object):
                                                                         position2[index2]=positionPref2[-1]+oe2['minDist']
                                                                         if position2[index2] < oe2['length']:
                                                                             positionPref2.append(position2[index2])
-                                                                            counterPref2.append(index)
                                                                             countPref2 += 1
                                                                         else:
                                                                             print('WARNING PROPAGATE RBC has been pushed outside SHOULD NOT HAPPEN 14')
                                                         #there is enough space for the RBC in outEPref2
                                                         else:
                                                             positionPref2.append(position2[index2])
-                                                            counterPref2.append(index)
                                                             countPref2 += 1
                                                     #no RBCs have been put in outEPref2 so far
                                                     else:
@@ -2119,7 +2087,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                 if position2[index2] < 0:
                                                                     position2[index2]=0
                                                         positionPref2.append(position2[index2])
-                                                        counterPref2.append(index)
                                                         countPref2 += 1
                                                 #There is no space in the second outEdge
 					        #Check if there is a third outEdge
@@ -2166,7 +2133,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                             position1[index1]=positionPref1[-1]-oe['minDist']
                                                                             if position1[index1] > 0:
                                                                                 positionPref1.append(position1[index1])
-                                                                                counterPref1.append(index)
                                                                                 countPref1 += 1
                                                                             else:
                                                                                 print('WARNING PROPAGATE RBC has been pushed outside SHOULD NOT HAPPEN! 15')
@@ -2174,7 +2140,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                             position1[index1]=positionPref1[-1]+oe['minDist']
                                                                             if position1[index1] < oe['length']:
                                                                                 positionPref1.append(position1[index1])
-                                                                                counterPref1.append(index)
                                                                                 countPref1 += 1
                                                                             else:
                                                                                 print('WARNING PROPAGATE RBC has been pushed outside SHOULD NOT HAPPEN! 16')
@@ -2183,7 +2148,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                             position3[index3]=positionPref3[-1]-oe3['minDist']
                                                                             if position3[index3] > 0:
                                                                                 positionPref3.append(position3[index3])
-                                                                                counterPref3.append(index)
                                                                                 countPref3 += 1
                                                                             else:
                                                                                 print('WARNING PROPAGATE RBC has been pushed outside SHOULD NOT HAPPEN! 17')
@@ -2191,14 +2155,12 @@ class LinearSystemHtdTotFixedDT(object):
                                                                             position3[index3]=positionPref3[-1]+oe3['minDist']
                                                                             if position3[index3] < oe3['length']:
                                                                                 positionPref3.append(position3[index3])
-                                                                                counterPref3.append(index)
                                                                                 countPref3 += 1
                                                                             else:
                                                                                 print('WARNING PROPAGATE RBC has been pushed outside SHOULD NOT HAPPEN 18')
                                                                 #There is enough space in outEdge 3
                                                                 else:
                                                                     positionPref3.append(position3[index3])
-                                                                    counterPref3.append(index)
                                                                     countPref3 += 1
                                                             #No RBCs have been put in outEPref3
                                                             else:
@@ -2224,7 +2186,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                         if position3[index3] < 0:
                                                                             position3[index3]=0
                                                                 positionPref3.append(position3[index3])
-                                                                counterPref3.append(index)
                                                                 countPref3 += 1
                                                         #There is no space in the third outEdge
                                                         else:
@@ -2233,7 +2194,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                 position1[index1]=positionPref1[-1]-oe['minDist']
                                                                 if position1[index1] > 0:
                                                                     positionPref1.append(position1[index1])
-                                                                    counterPref1.append(index)
                                                                     countPref1 += 1
                                                                 else:
                                                                     pref1Full=1
@@ -2242,7 +2202,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                 position1[index1]=positionPref1[-1]+oe['minDist']
                                                                 if position1[index1] < oe['length']:
                                                                     positionPref1.append(position1[index1])
-                                                                    counterPref1.append(index)
                                                                     countPref1 += 1
                                                                 else:
                                                                     pref1Full=1
@@ -2254,7 +2213,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                             position1[index1]=positionPref1[-1]-oe['minDist']
                                                             if position1[index1] > 0:
                                                                 positionPref1.append(position1[index1])
-                                                                counterPref1.append(index)
                                                                 countPref1 += 1
                                                             else:
                                                                 pref1Full=1
@@ -2263,7 +2221,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                             position1[index1]=positionPref1[-1]+oe['minDist']
                                                             if position1[index1] < oe['length']:
                                                                 positionPref1.append(position1[index1])
-                                                                counterPref1.append(index)
                                                                 countPref1 += 1
                                                             else:
                                                                 pref1Full=1
@@ -2271,7 +2228,6 @@ class LinearSystemHtdTotFixedDT(object):
                                             #If the RBC fits into outEPref1
                                             else:
                                                 positionPref1.append(position1[index1])
-                                                counterPref1.append(index)
                                                 countPref1 += 1
                                         #There are not yet any new RBCs in outEdgePref
                                         else:
@@ -2294,7 +2250,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                     if position1[index1] < 0:
                                                         position1[index1]=0
                                             positionPref1.append(position1[index1])
-                                            counterPref1.append(index)
                                             countPref1 += 1
                                     #The RBCs do not fit into the prefered outEdge anymore
                                     #Therefore they are either put in outEdge2 or outEdge3
@@ -2347,7 +2302,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                         position2[index2]=positionPref2[-1]-oe2['minDist']
                                                                         if position2[index2] > 0:
                                                                             positionPref2.append(position2[index2])
-                                                                            counterPref2.append(index)
                                                                             countPref2 += 1
                                                                         else:
                                                                             print('WARNING PROPAGATE RBC has been pushed outside SHOULD NOT HAPPEN 19')
@@ -2355,7 +2309,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                         position2[index2]=positionPref2[-1]+oe2['minDist']
                                                                         if position2[index2] < oe2['length']:
                                                                             positionPref2.append(position2[index2])
-                                                                            counterPref2.append(index)
                                                                             countPref2 += 1
                                                                         else:
                                                                             print('WARNING PROPAGATE RBC has been pushed outside SHOULD NOT HAPPEN 20')
@@ -2364,7 +2317,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                         position3[index3]=positionPref3[-1]-oe3['minDist']
                                                                         if position3[index3] > 0:
                                                                             positionPref3.append(position3[index3])
-                                                                            counterPref3.append(index)
                                                                             countPref3 += 1
                                                                         else:
                                                                             print('WARNING PROPAGATE RBC has been pushed outside SHOULD NOT HAPPEN 21')
@@ -2372,14 +2324,12 @@ class LinearSystemHtdTotFixedDT(object):
                                                                         position3[index3]=positionPref3[-1]+oe3['minDist']
                                                                         if position3[index3] < oe3['length']:
                                                                             positionPref3.append(position3[index3])
-                                                                            counterPref3.append(index)
                                                                             countPref3 += 1
                                                                         else:
                                                                             print('WARNING PROPAGATE RBC has been pushed outside SHOULD NOT HAPPEN 22')
                                                             #There is enough space in outEdge 3
                                                             else:
                                                                 positionPref3.append(position3[index3])
-                                                                counterPref3.append(index)
                                                                 countPref3 += 1
                                                         #There are no RBCs in outEdgePref3
                                                         else:
@@ -2399,7 +2349,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                                     if position3[index3] < 0:
                                                                         position3[index3]=0
                                                             positionPref3.append(position3[index3])
-                                                            counterPref3.append(index)
                                                             countPref3 += 1
                                                     else:
                                                     #There is no space in the third outEdge
@@ -2407,7 +2356,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                             position2[index2]=positionPref2[-1]-oe2['minDist']
                                                             if position2[index2] > 0:
                                                                 positionPref2.append(position2[index2])
-                                                                counterPref2.append(index)
                                                                 countPref2 += 1
                                                             else:
                                                                 pref2Full = 1
@@ -2416,7 +2364,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                             position2[index2]=positionPref2[-1]+oe2['minDist']
                                                             if position2[index2] < oe2['length']:
                                                                 positionPref2.append(position2[index2])
-                                                                counterPref2.append(index)
                                                                 countPref2 += 1
                                                             else:
                                                                 pref2Full = 1
@@ -2428,7 +2375,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                         position2[index2]=positionPref2[-1]-oe2['minDist']
                                                         if position2[index2] > 0:
                                                             positionPref2.append(position2[index2])
-                                                            counterPref2.append(index)
                                                             countPref2 += 1
                                                         else:
                                                             pref2Full = 1
@@ -2437,7 +2383,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                         position2[index2]=positionPref2[-1]+oe2['minDist']
                                                         if position2[index2] < oe2['length']:
                                                             positionPref2.append(position2[index2])
-                                                            counterPref2.append(index)
                                                             countPref2 += 1
                                                         else:
                                                             pref2Full = 1
@@ -2445,7 +2390,6 @@ class LinearSystemHtdTotFixedDT(object):
                                             #There is enough space for the RBCs in the outEdge 2
                                             else:
                                                 positionPref2.append(position2[index2])
-                                                counterPref2.append(index)
                                                 countPref2 += 1
                                         #No RBCs have been put into outEPref2 yet
                                         else:
@@ -2464,7 +2408,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                     if position2[index2] < 0:
                                                         position2[index2]=0
                                             positionPref2.append(position2[index2])
-                                            counterPref2.append(index)
                                             countPref2 += 1
                                     else:
                                         #Check if there is a third outEdge
@@ -2481,7 +2424,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                             position3[index3]=positionPref3[-1]-oe3['minDist']
                                                             if position3[index3] > 0:
                                                                 positionPref3.append(position3[index3])
-                                                                counterPref3.append(index)
                                                                 countPref3 += 1
                                                             else:
                                                                 pref3Full = 1
@@ -2490,7 +2432,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                             position3[index3]=positionPref3[-1]+oe3['minDist']
                                                             if position3[index3] < oe3['length']:
                                                                 positionPref3.append(position3[index3])
-                                                                counterPref3.append(index)
                                                                 countPref3 += 1
                                                             else:
                                                                 pref3Full = 1
@@ -2498,7 +2439,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                     #There is enough space in outEdge 3
                                                     else:
                                                         positionPref3.append(position3[index3])
-                                                        counterPref3.append(index)
                                                         countPref3 += 1
                                                 #No RBCs have been put in outEPref3 yet
                                                 else:
@@ -2517,7 +2457,6 @@ class LinearSystemHtdTotFixedDT(object):
                                                             if position3[index3] < 0:
                                                                 position3[index3]=0
                                                     positionPref3.append(position3[index3])
-                                                    counterPref3.append(index)
                                                     countPref3 += 1
                                             #No space in Pref3
                                             else:
