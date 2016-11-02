@@ -1013,10 +1013,13 @@ class LinearSystemHtdTotFixedDT(object):
                     nRBC=len(e['rRBC'])
                     if sign == 1.0:
                         if e['rRBC'][-1] > e['length']:
-                            bifRBCsIndex=range((np.array(e['rRBC'])>e['length']).tolist().index(True),nRBC)
+                            bifRBCsIndex=range((e['rRBC']>e['length']).tolist().index(True),nRBC)
                     else:
                         if e['rRBC'][0] < 0:
-                            bifRBCsIndex=range(0,(np.array(e['rRBC'])<0.).tolist().index(False))
+                            try:
+                                bifRBCsIndex=range(0,(e['rRBC']<0.).tolist().index(False))
+                            except:
+                                bifRBCsIndex=range(nRBC)
                     noBifEvents=len(bifRBCsIndex)
                 else:
                     noBifEvents = 0
