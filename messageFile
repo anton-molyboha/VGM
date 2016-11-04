@@ -1,6 +1,9 @@
-linearSystem_htd.py &
-linearSystem_htd_TotFixedDT.py:
+Dictonary: ImproveCode has been deleted --> obsoletet
 
-- reduced ERROR outpu
-- convergent bifurcations: overshootTimes: the dummies (containing the edge indices) should not be floats but integers. Furthermore it is not necessary that they are
-stored as arrays, now they are lists and integer output is guaranteed
+linearSystem_htd_TotFixedDT_NEW.py
+--> Development Version to test and introduce new funcions
+
+linearSystem_htd_TotFixedDT_NewNew.py
+--> Version to implement new functions --> untested!
+
+

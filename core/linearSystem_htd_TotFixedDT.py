@@ -95,6 +95,8 @@ class LinearSystemHtdTotFixedDT(object):
         G.es['countRBCs']=[0]*G.ecount()
         G.es['crosssection']=np.array([0.25*np.pi]*G.ecount())*np.array(G.es['diameter'])**2
         G.es['volume']=[e['crosssection']*e['length'] for e in G.es]
+        #G.es['numberOfBifurcationEvents']=[[]]*G.ecount()
+        G.es['numberOfBifurcationEventsRaw']=[np.array([])]*G.ecount()
         adjacent=[]
         for i in xrange(G.vcount()):
             adjacent.append(G.adjacent(i))
@@ -971,9 +973,12 @@ class LinearSystemHtdTotFixedDT(object):
             rbcMoved = 0
         edgeList=G.es[edgeList0]
         #Edges are sorted based on the pressure at the outlet
+        #pOut=[G.vs[e['target']]['pressure'] if e['sign'] == 1.0 else G.vs[e['source']]['pressure']
+        #    for e in edgeList]
+        #sortedE=zip(pOut,edgeList0)
         pOut=[G.vs[e['target']]['pressure'] if e['sign'] == 1.0 else G.vs[e['source']]['pressure']
-            for e in edgeList]
-        sortedE=zip(pOut,edgeList0)
+            for e in G.es]
+        sortedE=zip(pOut,range(G.ecount()))
         sortedE.sort()
         sortedE=[i[1] for i in sortedE]
         convEdges2=[0]*G.ecount()
@@ -1022,9 +1027,25 @@ class LinearSystemHtdTotFixedDT(object):
                                     bifRBCsIndex.append(i)
                                 else:
                                     break
+                    #Deal with bifurcation events and overshoots in every edge
+                    ##bifRBCsIndes - array with overshooting RBCs from smallest to largest index
+                    #bifRBCsIndex=[]
+                    #nRBC=len(e['rRBC'])
+                    #if sign == 1.0:
+                    #    if e['rRBC'][-1] > e['length']:
+                    #        bifRBCsIndex=range((e['rRBC']>e['length']).tolist().index(True),nRBC)
+                    #else:
+                    #    if e['rRBC'][0] < 0:
+                    #        try:
+                    #            bifRBCsIndex=range(0,(e['rRBC']<0.).tolist().index(False))
+                    #        except:
+                    #            bifRBCsIndex=range(nRBC)
                     noBifEvents=len(bifRBCsIndex)
+                    e['numberOfBifurcationEventsRaw']=np.concatenate([e['numberOfBifurcationEventsRaw'],[noBifEvents]])
                 else:
                     noBifEvents = 0
+                    #e['numberOfBifurcationEvents'].append(0)
+                    e['numberOfBifurcationEventsRaw']=np.concatenate([e['numberOfBifurcationEventsRaw'],[0]])
                 #Convergent Edge without a bifurcation event
                 if noBifEvents == 0 and (G.vs[vi]['vType']==4 or G.vs[vi]['vType']==6):
                     convEdges2[ei]=1
@@ -1035,6 +1056,7 @@ class LinearSystemHtdTotFixedDT(object):
                     if G.vs[vi]['vType'] == 2:
                         overshootsNo=noBifEvents
                         e['rRBC']=[e['rRBC'][:-noBifEvents] if sign == 1.0 else e['rRBC'][noBifEvents::]][0]
+                        #e['numberOfBifurcationEvents'].append(noBifEvents)
                         vertexUpdate.append(e['target'])
                         vertexUpdate.append(e['source'])
                         edgeUpdate.append(ei)
@@ -1044,7 +1066,7 @@ class LinearSystemHtdTotFixedDT(object):
                         outE=G.vs[vi]['outflowE'][0]
                         oe=G.es[outE]
                         #Calculate possible number of bifurcation Events
-			#distToFirst = distance to first vertex in vessel
+			            #distToFirst = distance to first vertex in vessel
                         if len(oe['rRBC']) > 0:
                             distToFirst=oe['rRBC'][0] if oe['sign'] == 1.0 else oe['length']-oe['rRBC'][-1]
                         else:
@@ -1052,7 +1074,7 @@ class LinearSystemHtdTotFixedDT(object):
                         #Check how many RBCs fit into the new Vessel
                         posNoBifEvents=int(np.floor(distToFirst/oe['minDist']))
                         #Check how many RBCs are allowed by nMax --> limitation results from np.floor(length/minDist) 
-			#and that RBCs are only 'half' in the vessel 
+			            #and that RBCs are only 'half' in the vessel 
                         if posNoBifEvents + len(oe['rRBC']) > oe['nMax']:
                             posNoBifEvents = int(oe['nMax'] - len(oe['rRBC']))
                         #OvershootsNo: compare posNoBifEvents with noBifEvents
@@ -1069,7 +1091,7 @@ class LinearSystemHtdTotFixedDT(object):
                             overshootsNo=posNoBifEvents
                         if overshootsNo > 0:
                             #overshootsDist --> array with the distances which the RBCs overshoot, 
-			    #starts wiht the RBC which overshoots the least 
+			                #starts wiht the RBC which overshoots the least 
                             overshootDist=[e['rRBC'][posBifRBCsIndex]-[e['length']]*overshootsNo if sign == 1.0
                                 else [0]*overshootsNo-e['rRBC'][posBifRBCsIndex]][0]
                             if sign != 1.0:
@@ -1128,17 +1150,22 @@ class LinearSystemHtdTotFixedDT(object):
                                 position=position[-1*overshootsNo::]
                             #Add rbcs to new Edge
                             if overshootsNo > 0:
+                                #e['numberOfBifurcationEvents'].append(overshootsNo)
                                 oe['countRBCs']+=len(position)
                                 if oe['sign'] == 1.0:
                                     oe['rRBC']=np.concatenate([position, oe['rRBC']])
                                 else:
                                     position = [oe['length']]*overshootsNo - position[::-1]
                                     oe['rRBC']=np.concatenate([oe['rRBC'],position])
+                            #else:
+                                #e['numberOfBifurcationEvents'].append(0)
                             #Remove RBCs from old Edge
                                 if sign == 1.0:
                                     e['rRBC']=e['rRBC'][:-overshootsNo]
                                 else:
                                     e['rRBC']=e['rRBC'][overshootsNo::]
+                        #else:
+                        #    e['numberOfBifurcationEvents'].append(0)
                         #Deal with RBCs which could not be reassigned to the new edge because of a traffic jam
                         noStuckRBCs=len(bifRBCsIndex)-overshootsNo
                         #move stuck RBCs back into vessel
@@ -2495,10 +2522,15 @@ class LinearSystemHtdTotFixedDT(object):
                                     oe3['rRBC']=np.concatenate([oe3['rRBC'],positionPref3])
                             #Remove RBCs from old Edge
                             if overshootsNo > 0:
+                                #e['numberOfBifurcationEvents'].append(overshootsNo)
                                 if sign == 1.0:
                                     e['rRBC']=e['rRBC'][:-overshootsNo]
                                 else:
                                     e['rRBC']=e['rRBC'][overshootsNo::]
+                            #else:
+                            #    e['numberOfBifurcationEvents'].append(0)
+                        #else:
+                        #    e['numberOfBifurcationEvents'].append(0)
                         #Deal with RBCs which could not be reassigned to the new edge because of a traffic jam
                         noStuckRBCs=len(bifRBCsIndex)-overshootsNo
                         for i in xrange(noStuckRBCs):
@@ -2574,9 +2606,11 @@ class LinearSystemHtdTotFixedDT(object):
                                             else:
                                                 break
                                 noBifEvents2=len(bifRBCsIndex2)
+                                e2['numberOfBifurcationEventsRaw']=np.concatenate([e2['numberOfBifurcationEventsRaw'],[noBifEvents2]])
                             else:
                                 bifRBCsIndex2=[]
                                 noBifEvents2=0
+                                e2['numberOfBifurcationEventsRaw']=np.concatenate([e2['numberOfBifurcationEventsRaw'],[0]])
                             sign2=e2['sign']
                         else:
                             noBifEvents2=0
@@ -2609,9 +2643,11 @@ class LinearSystemHtdTotFixedDT(object):
                                                 else:
                                                     break
                                     noBifEvents3=len(bifRBCsIndex3)
+                                    e3['numberOfBifurcationEventsRaw']=np.concatenate([e3['numberOfBifurcationEventsRaw'],[noBifEvents2]])
                                 else:
                                     bifRBCsIndex3=[]
                                     noBifEvents3=0
+                                    e3['numberOfBifurcationEventsRaw']=np.concatenate([e3['numberOfBifurcationEventsRaw'],[noBifEvents2]])
                                 sign3=e3['sign']
                             else:
                                 bifRBCsIndex3=[]
@@ -2732,25 +2768,38 @@ class LinearSystemHtdTotFixedDT(object):
                                 oe['rRBC']=np.concatenate([oe['rRBC'],position])
                             #Remove RBCs from old Edge 1
                             if count1 > 0:
+                                #e['numberOfBifurcationEvents'].append(count1)
                                 if sign == 1.0:
                                     e['rRBC']=e['rRBC'][:-count1]
                                 else:
                                     e['rRBC']=e['rRBC'][count1::]
+                            #else:
+                            #    e['numberOfBifurcationEvents'].append(0)
                             if noBifEvents2 > 0 and count2 > 0:
                                 #Remove RBCs from old Edge 2
+                                #e2['numberOfBifurcationEvents'].append(count2)
                                 if sign2 == 1.0:
                                     e2['rRBC']=e2['rRBC'][:-count2]
                                 else:
                                     e2['rRBC']=e2['rRBC'][count2::]
+                            #else:
+                            #    e2['numberOfBifurcationEvents'].append(0)
                             if boolTrifurcation:
                                 if noBifEvents3 > 0 and count3 > 0:
                                     #Remove RBCs from old Edge 3
+                                    #e3['numberOfBifurcationEvents'].append(count3)
                                     if sign3 == 1.0:
                                         e3['rRBC']=e3['rRBC'][:-count3]
                                     else:
                                         e3['rRBC']=e3['rRBC'][count3::]
+                                #else:
+                                #    e3['numberOfBifurcationEvents'].append(0)
                             overshootsNo = count1 + count2 + count3
                         else:
+                            #e['numberOfBifurcationEvents'].append(0)
+                            #e2['numberOfBifurcationEvents'].append(0)
+                            #if boolTrifurcation:
+                            #   e3['numberOfBifurcationEvents'].append(0)
                             count1=0
                             count2=0
                             count3=0
@@ -2886,9 +2935,11 @@ class LinearSystemHtdTotFixedDT(object):
                                             else:
                                                 break
                                 noBifEvents2=len(bifRBCsIndex2)
+                                e2['numberOfBifurcationEventsRaw']=np.concatenate([e2['numberOfBifurcationEventsRaw'],[noBifEvents2]])
                             else:
                                 noBifEvents2=0
                                 bifRBCsIndex2=[]
+                                e2['numberOfBifurcationEventsRaw']=np.concatenate([e2['numberOfBifurcationEventsRaw'],[noBifEvents2]])
                         else:
                             bifRBCsIndex2=[]
                             noBifEvents2=0
@@ -3553,18 +3604,26 @@ class LinearSystemHtdTotFixedDT(object):
                                 oe2['rRBC']=np.concatenate([oe2['rRBC'],positionPref2])
                             #Remove RBCs from old Edge 1
                             if count1 > 0:
+                                #e['numberOfBifurcationEvents'].append(count1)
                                 if sign == 1.0:
                                     e['rRBC']=e['rRBC'][:-count1]
                                 else:
                                     e['rRBC']=e['rRBC'][count1::]
+                            #else:
+                                #e['numberOfBifurcationEvents'].append(0)
                             if noBifEvents2 > 0 and count2 > 0:
                                 #Remove RBCs from old Edge 2
+                                #e2['numberOfBifurcationEvents'].append(count2)
                                 if sign2 == 1.0:
                                     e2['rRBC']=e2['rRBC'][:-count2]
                                 else:
                                     e2['rRBC']=e2['rRBC'][count2::]
+                            #else:
+                                #e2['numberOfBifurcationEvents'].append(0)
                         #OutEdges are currently blocked, no bifurcation events possible
                         else:
+                            #e['numberOfBifurcationEvents'].append(0)
+                            #e2['numberOfBifurcationEvents'].append(0)
                             countPref1=0
                             countPref2=0
                             count1=0
@@ -3636,6 +3695,13 @@ class LinearSystemHtdTotFixedDT(object):
                                         count += 1
                                         if count >= noStuckRBCs2+1 and moved == 0:
                                             break
+                #-------------------------------------------------------------------------------------------
+                #else:
+                #    e['numberOfBifurcationEvents'].append(0)
+            else:
+                if convEdges2[ei] == 0:
+                    e['numberOfBifurcationEventsRaw']=np.concatenate([e['numberOfBifurcationEventsRaw'],[0]])
+                    #    e['numberOfBifurcationEvents'].append(0)
             #-------------------------------------------------------------------------------------------
             rRBC = []
             rRBC2 = []
@@ -3945,6 +4011,17 @@ class LinearSystemHtdTotFixedDT(object):
                                 edgesWithMovedRBCs.append(e.index)
 
         #-------------------------------------------------------------------------------------------
+        for e in G.es:
+            if len(e['numberOfBifurcationEventsRaw']) != len(G.es[0]['numberOfBifurcationEventsRaw']):
+                print('ERROR')
+                print(e.index)
+                print(len(e['numberOfBifurcationEventsRaw']))
+                sign=e['sign']
+                if sign == 1:
+                    vi=e['target']
+                else:
+                    vi=e['source']
+                print(G.vs[vi]['vType'])
         self._vertexUpdate=np.unique(vertexUpdate)
         edgeUpdate=np.unique(edgeUpdate)
         self._edgeUpdate=edgeUpdate.tolist()
