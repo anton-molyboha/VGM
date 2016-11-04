@@ -306,9 +306,7 @@ class LinearSystemHtdTotFixedDT(object):
         print(self._eps)
         stdout.write("\rEstimated network turnover time Ttau=%f        \n" % G['Ttau'])
 
-            
     #--------------------------------------------------------------------------
-
     def _compute_mu_sigma_inlet_RBC_distribution(self, httBC):
         """Updates the nominal and specific resistance of a given edge 
         sequence.
@@ -1007,26 +1005,30 @@ class LinearSystemHtdTotFixedDT(object):
                 #If RBCs are present move all RBCs
                 if len(e['rRBC']) > 0:
                     e['rRBC'] = e['rRBC'] + e['v'] * dt * e['sign']
-                    #Deal with bifurcation events and overshoots in every edge
-                    #bifRBCsIndes - array with overshooting RBCs from smallest to largest index
                     bifRBCsIndex=[]
                     nRBC=len(e['rRBC'])
                     if sign == 1.0:
                         if e['rRBC'][-1] > e['length']:
-                            bifRBCsIndex=range((e['rRBC']>e['length']).tolist().index(True),nRBC)
+                            for i,j in enumerate(e['rRBC'][::-1]):
+                                if j > e['length']:
+                                    bifRBCsIndex.append(nRBC-1-i)
+                                else:
+                                    break
+                        bifRBCsIndex=bifRBCsIndex[::-1]
                     else:
                         if e['rRBC'][0] < 0:
-                            try:
-                                bifRBCsIndex=range(0,(e['rRBC']<0.).tolist().index(False))
-                            except:
-                                bifRBCsIndex=range(nRBC)
+                            for i,j in enumerate(e['rRBC']):
+                                if j < 0:
+                                    bifRBCsIndex.append(i)
+                                else:
+                                    break
                     noBifEvents=len(bifRBCsIndex)
                 else:
                     noBifEvents = 0
                 #Convergent Edge without a bifurcation event
-                if noBifEvents == 0 and G.vs[vi]['vType']==4:
+                if noBifEvents == 0 and (G.vs[vi]['vType']==4 or G.vs[vi]['vType']==6):
                     convEdges2[ei]=1
-        #-------------------------------------------------------------------------------------------
+                #-------------------------------------------------------------------------------------------
                 #Check if a bifurcation event is taking place
                 if noBifEvents > 0:
                     #If Edge is outlflow Edge --> remove RBCs
@@ -1036,7 +1038,7 @@ class LinearSystemHtdTotFixedDT(object):
                         vertexUpdate.append(e['target'])
                         vertexUpdate.append(e['source'])
                         edgeUpdate.append(ei)
-            #-------------------------------------------------------------------------------------------
+                    #-------------------------------------------------------------------------------------------
                     #if vertex is connecting vertex
                     elif G.vs[vi]['vType'] == 5:
                         outE=G.vs[vi]['outflowE'][0]
@@ -1169,7 +1171,7 @@ class LinearSystemHtdTotFixedDT(object):
                                     count += 1
                                     if count >= noStuckRBCs+1 and moved == 0:
                                         break
-          #-------------------------------------------------------------------------------------------
+                    #-------------------------------------------------------------------------------------------
                     #if vertex is divergent vertex
                     elif G.vs[vi]['vType'] == 3:
                         outEdges=G.vs[vi]['outflowE']
@@ -2528,8 +2530,8 @@ class LinearSystemHtdTotFixedDT(object):
                                     count += 1
                                     if count >= noStuckRBCs+1 and moved == 0:
                                         break
-    #-------------------------------------------------------------------------------------------
-                #if vertex is convergent vertex
+                    #-------------------------------------------------------------------------------------------
+                    #if vertex is convergent vertex
                     elif G.vs[vi]['vType'] == 4:
                         boolTrifurcation = 0
                         bifRBCsIndex1=bifRBCsIndex
@@ -2584,7 +2586,7 @@ class LinearSystemHtdTotFixedDT(object):
                         if len(inflowEdges) > 2:
                             e3=G.es[inE3]
                             boolTrifurcation = 1
-                            if convEdges2[inE2] == 0:
+                            if convEdges2[inE3] == 0:
                                 convEdges2[inE3]=1
                                 #If RBCs are present move all RBCs in inEdge3
                                 if len(e3['rRBC']) > 0:
@@ -2849,7 +2851,7 @@ class LinearSystemHtdTotFixedDT(object):
                                         count += 1
                                         if count >= noStuckRBCs3+1 and moved == 0:
                                             break
-         #------------------------------------------------------------------------------------------
+                    #------------------------------------------------------------------------------------------
                     #if vertex is double connecting vertex
                     elif G.vs[vi]['vType'] == 6:
                         bifRBCsIndex1=bifRBCsIndex
@@ -3008,8 +3010,8 @@ class LinearSystemHtdTotFixedDT(object):
                             if nonCap:
                                 countNo1=0
                                 countNo2=0
-		                count1 = 0
-		                count2 = 0
+                                count1 = 0
+                                count2 = 0
                                 inEPref1=[]
                                 inEPref2=[]
                                 indexPref1=[]
@@ -3257,8 +3259,8 @@ class LinearSystemHtdTotFixedDT(object):
                                 countPref2=0
                                 pref1Full = 0
                                 pref2Full = 0
-		                count1 = 0
-		                count2 = 0
+                                count1 = 0
+                                count2 = 0
                                 #Loop over all movable RBCs
                                 for i in xrange(overshootsNo):
                                     index=-1*(i+1)

@@ -1025,7 +1025,6 @@ class LinearSystemHtdTotFixedDTTrack(object):
         sortedE=zip(pOut,edgeList0)
         sortedE.sort()
         sortedE=[i[1] for i in sortedE]
-
         convEdges2=[0]*G.ecount()
         edgeUpdate=[]   #Edges where the number of RBCs changed --> need to be updated
         vertexUpdate=[] #Vertices where the number of RBCs changed in adjacent edges --> need to be updated
@@ -1076,7 +1075,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
                 else:
                     noBifEvents = 0
                 #Convergent Edge without a bifurcation event
-                if noBifEvents == 0 and G.vs[vi]['vType']==4:
+                if noBifEvents == 0 and (G.vs[vi]['vType']==4 or G.vs[vi]['vType']==6):
                     convEdges2[ei]=1
         #-------------------------------------------------------------------------------------------
                 #Check if a bifurcation event is taking place
@@ -2743,7 +2742,7 @@ class LinearSystemHtdTotFixedDTTrack(object):
                         if len(inflowEdges) > 2:
                             e3=G.es[inE3]
                             boolTrifurcation = 1
-                            if convEdges2[inE2] == 0:
+                            if convEdges2[inE3] == 0:
                                 convEdges2[inE3]=1
                                 #If RBCs are present move all RBCs in inEdge3
                                 if len(e3['rRBC']) > 0:
