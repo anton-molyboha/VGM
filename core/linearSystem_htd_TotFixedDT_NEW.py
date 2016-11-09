@@ -1093,6 +1093,8 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                         overshootsNo,posBifRBCsIndex=self._compare_noBifEvents_to_posNoBifEvents(\
                             posNoBifEvents,noBifEvents,bifRBCsIndex,sign)
                         if nonCap:
+                            overshootsNo1Dummy, overshootsNo2Dummy, overshootsNo3Dummy = \
+                                self._nonCapDiv_compute_overshootNos_from_ratios(boolTrifurcation,overshootsNo,ratio1,ratio2,ratio3)
                             if not boolTrifurcation:
                                 if ratio1 != 0 and overshootsNo != 0:
                                     def errorDistributeRBCs(n1):
@@ -1104,7 +1106,10 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                                 overshootsNo2 = overshootsNo - overshootsNo1
                                 overshootsNo3 = 0
                             else:
-                                if ratio1 != 0 and ratio2 != 0 and overshootsNo != 0:
+                                if overshootsNo == 0:
+                                    overshootsNo1=0
+                                    overshootsNo2=0
+                                elif ratio1 != 0 and ratio2 != 0 and overshootsNo != 0:
                                     def errorDistributeRBCs(n12):
                                         return [n12[0]/float(overshootsNo)-ratio1,n12[1]/float(overshootsNo)-ratio2]
                                     resultMinimizeError = root(errorDistributeRBCs,[np.ceil(ratio1 * overshootsNo),np.ceil(ratio2 * overshootsNo)])
@@ -1123,6 +1128,22 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                                     overshootsNo2=int(np.round(resultMinimizeError['x']))
                                     overshootsNo1=0
                                 overshootsNo3 = overshootsNo - overshootsNo1 - overshootsNo2
+                            if overshootsNo1 != overshootsNo1Dummy:
+                                print('BIGERROR 1-1')
+                                print(overshootsNo1)
+                                print(overshootsNo1Dummy)
+                                print(ratio1)
+                                print(ratio2)
+                                print(ratio3)
+                                print(overshootsNo)
+                            if overshootsNo2 != overshootsNo2Dummy:
+                                print('BIGERROR 1-2')
+                                print(overshootsNo2)
+                                print(overshootsNo2Dummy)
+                            if overshootsNo3 != overshootsNo3Dummy:
+                                print('BIGERROR 1-3')
+                                print(overshootsNo3)
+                                print(overshootsNo3Dummy)
                             if overshootsNo1 > posNoBifEventsPref:
                                 overshootsNo2 += overshootsNo1 - posNoBifEventsPref
                                 overshootsNo1 = posNoBifEventsPref
@@ -1148,6 +1169,20 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                                     else:
                                         overshootsNo2 = posNoBifEventsPref2
                                 overshootsNo3 = posNoBifEventsPref3
+                            overshootsNo1Dummy,overshootsNo2Dummy,overshootsNo3Dummy=self._nonCapDiv_compare_overshootNos_to_posBifEvents(\
+                                overshootsNo1,overshootsNo2,overshootsNo3,posNoBifEventsPref,posNoBifEventsPref2,posNoBifEventsPref3,overshootsNo)
+                            if overshootsNo1 != overshootsNo1Dummy:
+                                print('BIGERROR 2-1')
+                                print(overshootsNo1)
+                                print(overshootsNo1Dummy)
+                            if overshootsNo2 != overshootsNo2Dummy:
+                                print('BIGERROR 2-2')
+                                print(overshootsNo2)
+                                print(overshootsNo2Dummy)
+                            if overshootsNo3 != overshootsNo3Dummy:
+                                print('BIGERROR 2-3')
+                                print(overshootsNo3)
+                                print(overshootsNo3Dummy)
                             overshootsNo = int(overshootsNo1 + overshootsNo2 + overshootsNo3)
                             posNoBifEvents = overshootsNo
                             posBifRBCsIndex=posBifRBCsIndex[-posNoBifEvents::] if sign == 1.0 \
@@ -2366,6 +2401,8 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                         noBifEvents = noBifEvents1 + noBifEvents2
                         overshootsNo=noBifEvents
                         if nonCap:
+                            overshootsNo1Dummy,overshootsNo2Dummy,overshootsNo3Dummy = \
+                                self._nonCapDiv_compute_overshootNos_from_ratios(0,overshootsNo,ratio1,ratio2,0.)
                             if ratio1 != 0 and overshootsNo != 0:
                                 def errorDistributeRBCs(n1):
                                     return n1/float(overshootsNo)-ratio1
@@ -2374,6 +2411,14 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                             else:
                                 overshootsNo1 = 0
                             overshootsNo2 = overshootsNo - overshootsNo1
+                            if overshootsNo1 != overshootsNo1Dummy:
+                                print('BIGERROR 3-1')
+                                print(overshootsNo1)
+                                print(overshootsNo1Dummy)
+                            if overshootsNo2 != overshootsNo2Dummy:
+                                print('BIGERROR 3-2')
+                                print(overshootsNo2)
+                                print(overshootsNo2Dummy)
                             stuck1=0
                             stuck2=0
                             if overshootsNo1 > posNoBifEventsPref:
@@ -2398,6 +2443,16 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                                     else:
                                         stuck2 += -(posNoBifEventsPref-overshootsNo1)
                                         overshootsNo1 = posNoBifEventsPref
+                            overshootsNo1Dummy,overshootsNo2Dummy,overshootsNo3Dummy=self._nonCapDiv_compare_overshootNos_to_posBifEvents(\
+                                overshootsNo1Dummy,overshootsNo2Dummy,0,posNoBifEventsPref,posNoBifEventsPref2,0,overshootsNo)
+                            if overshootsNo1 != overshootsNo1Dummy:
+                                print('BIGERROR 4-1')
+                                print(overshootsNo1)
+                                print(overshootsNo1Dummy)
+                            if overshootsNo2 != overshootsNo2Dummy:
+                                print('BIGERROR 4-2')
+                                print(overshootsNo2)
+                                print(overshootsNo2Dummy)
                             overshootsNo = int(overshootsNo1 + overshootsNo2)
                             posNoBifEvents = overshootsNo
                         #Calculate number of bifEvents
@@ -3444,6 +3499,7 @@ class LinearSystemHtdTotFixedDT_NEW(object):
 
     #--------------------------------------------------------------------------
     def _compare_noBifEvents_to_posNoBifEvents(self,posNoBifEvents,noBifEvents,bifRBCsIndex,sign):
+        #TODO update description
         """ Push RBCs which can not be propagated back into their edge of origin.
         All RBCs which have been propagated in that edge are pushed backwards such
         that overlapping is avoided.
@@ -3451,7 +3507,8 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                noBifEvents: number of bifurcation events taking place
                bifRBCsIndex: list of RBC indices which are overshooting
                sign: sign of the edge in which the RBC are currently in
-         OUTPUT: updated edge property 'rRBC'
+         OUTPUT: overshootsNo:
+                 posBifRBCsIndex:
         """
         if posNoBifEvents > noBifEvents:
             posBifRBCsIndex = bifRBCsIndex
@@ -3466,6 +3523,95 @@ class LinearSystemHtdTotFixedDT_NEW(object):
 
         return overshootsNo,posBifRBCsIndex
 
+    #----------------------------------------------------------------------------------------------------
+    def _nonCapDiv_compute_overshootNos_from_ratios(self,boolTrifurcation,overshootsNo,ratio1,ratio2,ratio3):
+        """ Compute overshootsNo for the outlfow edge of non capillary divergent bifurcations 
+        INPUT: boolTrifuration: bool if we are looking at a bifurcation with 3 outflows
+               overshootsNo: number of RBCs overshooting in total
+               ratio1: desired RBC ratio for the preferred outEdge
+               ratio2: desired RBC ratio for the second preferred outEdge
+               ratio3: desired RBC ratio for the third preferred outEdge
+        OUTPUT: overshootsNo1, overshootsNo2, overshootsNo3:
+                 overshootNos for the outflow edges (preferred outEdge is No1)
+        """
+
+        #Optimization Functions
+        if overshootsNo > 0:
+            def errorDistributeRBCs_ratio1(n1):
+                return n1/float(overshootsNo)-ratio1
+            def errorDistributeRBCs_ratio2(n2):
+                return n2/float(overshootsNo)-ratio2
+            def errorDistributeRBCs_ratio1_and_ratio2(n12):
+                return [n12[0]/float(overshootsNo)-ratio1,n12[1]/float(overshootsNo)-ratio2]
+
+            if not boolTrifurcation:
+                if ratio1 != 0 and overshootsNo != 0:
+                    resultMinimizeError = root(errorDistributeRBCs_ratio1,np.ceil(ratio1 * overshootsNo))
+                    overshootsNo1=int(np.round(resultMinimizeError['x']))
+                else:
+                    overshootsNo1 = 0
+                overshootsNo2 = overshootsNo - overshootsNo1
+                overshootsNo3 = 0
+            else:
+                if ratio1 != 0 and ratio2 != 0 and overshootsNo != 0:
+                    resultMinimizeError = root(errorDistributeRBCs_ratio1_and_ratio2,\
+                        [np.ceil(ratio1 * overshootsNo),np.ceil(ratio2 * overshootsNo)])
+                    overshootsNo1=int(np.round(resultMinimizeError['x'][0]))
+                    overshootsNo2=int(np.round(resultMinimizeError['x'][1]))
+                elif ratio1 != 0 and overshootsNo != 0:
+                    resultMinimizeError = root(errorDistributeRBCs_ratio1,np.ceil(ratio1 * overshootsNo))
+                    overshootsNo1=int(np.round(resultMinimizeError['x']))
+                    overshootsNo2=0
+                elif ratio2 != 0 and overshootsNo != 0:
+                    resultMinimizeError = root(errorDistributeRBCs_ratio2,np.ceil(ratio2 * overshootsNo))
+                    overshootsNo2=int(np.round(resultMinimizeError['x']))
+                    overshootsNo1=0
+                overshootsNo3 = overshootsNo - overshootsNo1 - overshootsNo2
+        else:
+            overshootsNo1=0
+            overshootsNo2=0
+            overshootsNo3=0
+
+        return overshootsNo1, overshootsNo2, overshootsNo3
+
+    #----------------------------------------------------------------------------------------------------
+    def _nonCapDiv_compare_overshootNos_to_posBifEvents(self,overshootsNo1,overshootsNo2,overshootsNo3, \
+        posNoBifEventsPref,posNoBifEventsPref2,posNoBifEventsPref3,overshootsNo):
+        """ Compare computed overshootNos to possible number of bifurcation events
+        INPUT: overshootsNo1, overshootsNo2, overshootsNo3:
+                 overshootNos for the outflow edges which are desired (preferred outEdge is No1)
+               posNoBifEventsPref, posNoBifEventsPref2,posNoBifEventsPref3:
+                 possible number of bifurcation Events for the available out edges
+        OUTPUT: overshootsNo1, overshootsNo2, overshootsNo3:
+                 overshootNos for the outflow edges which are infact possible (preferred outEdge is No1)
+        """
+        if overshootsNo1 > posNoBifEventsPref:
+            overshootsNo2 += overshootsNo1 - posNoBifEventsPref
+            overshootsNo1 = posNoBifEventsPref
+        if overshootsNo2 > posNoBifEventsPref2:
+            #possible bifurcation event > currentNewRBCs + additional RBCs from edge 2
+            if posNoBifEventsPref > overshootsNo1 +  (overshootsNo2 - posNoBifEventsPref2):
+                overshootsNo1 += overshootsNo2 - posNoBifEventsPref2
+            else:
+                overshootsNo1 = posNoBifEventsPref
+                if posNoBifEventsPref3 > overshootsNo - (posNoBifEventsPref + posNoBifEventsPref2):
+                    overshootsNo3 = overshootsNo - (posNoBifEventsPref + posNoBifEventsPref2)
+                else:
+                    overshootsNo3 = posNoBifEventsPref3
+                overshootsNo2 = posNoBifEventsPref2
+        if overshootsNo3 > posNoBifEventsPref3:
+            #possible bifurcation event > currentNewRBCs + additional RBCs from edge 2
+            if posNoBifEventsPref > overshootsNo1 +  (overshootsNo3 - posNoBifEventsPref3):
+                overshootsNo1 += overshootsNo3 - posNoBifEventsPref3
+            else:
+                overshootsNo1 = posNoBifEventsPref
+                if posNoBifEventsPref2 > overshootsNo - (posNoBifEventsPref3 + posNoBifEventsPref):
+                    overshootsNo2 = overshootsNo - (posNoBifEventsPref3 + posNoBifEventsPref)
+                else:
+                    overshootsNo2 = posNoBifEventsPref2
+            overshootsNo3 = posNoBifEventsPref3
+
+        return overshootsNo1, overshootsNo2, overshootsNo3
     #--------------------------------------------------------------------------
     #@profile
     def evolve(self, time, method, dtfix,**kwargs):

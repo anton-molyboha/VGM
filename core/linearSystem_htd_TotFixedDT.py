@@ -1086,14 +1086,14 @@ class LinearSystemHtdTotFixedDT(object):
                             posBifRBCsIndex=[]
                             overshootsNo=0
                         else:
-                            posBifRBCsIndex=[bifRBCsIndex[-posNoBifEvents::] if sign == 1.0 \
-                                else bifRBCsIndex[:posNoBifEvents]]
+                            posBifRBCsIndex=bifRBCsIndex[-posNoBifEvents::] if sign == 1.0 \
+                                else bifRBCsIndex[:posNoBifEvents]
                             overshootsNo=posNoBifEvents
                         if overshootsNo > 0:
                             #overshootsDist --> array with the distances which the RBCs overshoot, 
 			                #starts wiht the RBC which overshoots the least 
-                            overshootDist=[e['rRBC'][posBifRBCsIndex]-[e['length']]*overshootsNo if sign == 1.0
-                                else [0]*overshootsNo-e['rRBC'][posBifRBCsIndex]][0]
+                            overshootDist=e['rRBC'][posBifRBCsIndex]-[e['length']]*overshootsNo if sign == 1.0 \
+                                else [0]*overshootsNo-e['rRBC'][posBifRBCsIndex]
                             if sign != 1.0:
                                 overshootDist = overshootDist[::-1]
                             #overshootTime --> time which every RBCs overshoots
@@ -1277,8 +1277,8 @@ class LinearSystemHtdTotFixedDT(object):
                             posBifRBCsIndex=[]
                             overshootsNo=0
                         else:
-                            posBifRBCsIndex=[bifRBCsIndex[-posNoBifEvents::] if sign == 1.0 \
-                                else bifRBCsIndex[:posNoBifEvents]]
+                            posBifRBCsIndex=bifRBCsIndex[-posNoBifEvents::] if sign == 1.0 \
+                                else bifRBCsIndex[:posNoBifEvents]
                             overshootsNo=posNoBifEvents
                         if nonCap:
                             if not boolTrifurcation:
@@ -1292,7 +1292,10 @@ class LinearSystemHtdTotFixedDT(object):
                                 overshootsNo2 = overshootsNo - overshootsNo1
                                 overshootsNo3 = 0
                             else:
-                                if ratio1 != 0 and ratio2 != 0 and overshootsNo != 0:
+                                if overshootsNo == 0:
+                                    overshootsNo1=0
+                                    overshootsNo2=0
+                                elif ratio1 != 0 and ratio2 != 0 and overshootsNo != 0:
                                     def errorDistributeRBCs(n12):
                                         return [n12[0]/float(overshootsNo)-ratio1,n12[1]/float(overshootsNo)-ratio2]
                                     resultMinimizeError = root(errorDistributeRBCs,[np.ceil(ratio1 * overshootsNo),np.ceil(ratio2 * overshootsNo)])
@@ -1363,12 +1366,12 @@ class LinearSystemHtdTotFixedDT(object):
                                 overshootsNo3 = posNoBifEventsPref3
                             overshootsNo = int(overshootsNo1 + overshootsNo2 + overshootsNo3)
                             posNoBifEvents = overshootsNo
-                            posBifRBCsIndex=[bifRBCsIndex[-posNoBifEvents::] if sign == 1.0 \
-                                else bifRBCsIndex[:posNoBifEvents]]
+                            posBifRBCsIndex=bifRBCsIndex[-posNoBifEvents::] if sign == 1.0 \
+                                else bifRBCsIndex[:posNoBifEvents]
                         if overshootsNo > 0:
                             #overshootDist starts with the RBC which overshoots the least
-                            overshootDist=[e['rRBC'][posBifRBCsIndex]-[e['length']]*overshootsNo if sign == 1.0
-                                else [0]*overshootsNo-e['rRBC'][posBifRBCsIndex]][0]
+                            overshootDist=e['rRBC'][posBifRBCsIndex]-[e['length']]*overshootsNo if sign == 1.0 \
+                                else [0]*overshootsNo-e['rRBC'][posBifRBCsIndex]
                             if sign != 1.0:
                                 overshootDist = overshootDist[::-1]
                             #overshootTime starts with the RBC which overshoots the least
@@ -2668,7 +2671,7 @@ class LinearSystemHtdTotFixedDT(object):
                         #If bifurcations are possible check how many overshoots there are at the inEdges
                         if posNoBifEvents > 0:
                             #overshootDist starts with the RBC which overshoots the least
-                            overshootDist1=[e['rRBC'][bifRBCsIndex1]-[e['length']]*noBifEvents1 if sign == 1.0
+                            overshootDist1=[e['rRBC'][bifRBCsIndex1]-[e['length']]*noBifEvents1 if sign == 1.0 \
                                 else [0]*noBifEvents1-e['rRBC'][bifRBCsIndex1]][0]
                             if sign != 1.0:
                                 overshootDist1 = overshootDist1[::-1]
@@ -2676,7 +2679,7 @@ class LinearSystemHtdTotFixedDT(object):
                             dummy1=[1]*len(overshootTime1)
                             if noBifEvents2 > 0:
                                 #overshootDist starts with the RBC which overshoots the least
-                                overshootDist2=[e2['rRBC'][bifRBCsIndex2]-[e2['length']]*noBifEvents2 if sign2 == 1.0
+                                overshootDist2=[e2['rRBC'][bifRBCsIndex2]-[e2['length']]*noBifEvents2 if sign2 == 1.0 \
                                     else [0]*noBifEvents2-e2['rRBC'][bifRBCsIndex2]][0]
                                 if sign2 != 1.0:
                                     overshootDist2 = overshootDist2[::-1]
@@ -2688,7 +2691,7 @@ class LinearSystemHtdTotFixedDT(object):
                                 dummy2=[]
                             if boolTrifurcation:
                                 if noBifEvents3 > 0:
-                                    overshootDist3=[e3['rRBC'][bifRBCsIndex3]-[e3['length']]*noBifEvents3 if sign3 == 1.0
+                                    overshootDist3=[e3['rRBC'][bifRBCsIndex3]-[e3['length']]*noBifEvents3 if sign3 == 1.0 \
                                         else [0]*noBifEvents3-e3['rRBC'][bifRBCsIndex3]][0]
                                     if sign3 != 1.0:
                                         overshootDist3 = overshootDist3[::-1]
@@ -3019,14 +3022,14 @@ class LinearSystemHtdTotFixedDT(object):
                         #Calculate number of bifEvents
                         #If bifurcations are possible check how many overshoots there are at the inEdges
                         if posNoBifEvents > 0:
-                            overshootDist1=[e['rRBC'][bifRBCsIndex1]-[e['length']]*noBifEvents1 if sign == 1.0
+                            overshootDist1=[e['rRBC'][bifRBCsIndex1]-[e['length']]*noBifEvents1 if sign == 1.0 \
                                 else [0]*noBifEvents1-e['rRBC'][bifRBCsIndex1]][0]
                             if sign != 1.0:
                                 overshootDist1 = overshootDist1[::-1]
                             overshootTime1=np.array(overshootDist1 / ([e['v']]*noBifEvents1))
                             dummy1=[1]*len(overshootTime1)
                             if noBifEvents2 > 0:
-                                overshootDist2=[e2['rRBC'][bifRBCsIndex2]-[e2['length']]*noBifEvents2 if sign2 == 1.0
+                                overshootDist2=[e2['rRBC'][bifRBCsIndex2]-[e2['length']]*noBifEvents2 if sign2 == 1.0 \
                                     else [0]*noBifEvents2-e2['rRBC'][bifRBCsIndex2]][0]
                                 if sign2 != 1.0:
                                     overshootDist2 = overshootDist2[::-1]
