@@ -1,9 +1,3 @@
-Dictonary: ImproveCode has been deleted --> obsoletet
+- .pyc deleted from git
 
-linearSystem_htd_TotFixedDT_NEW.py
---> Development Version to test and introduce new funcions
-
-linearSystem_htd_TotFixedDT_NewNew.py
---> Version to implement new functions --> untested!
-
-
+- tests set up (not finished)
