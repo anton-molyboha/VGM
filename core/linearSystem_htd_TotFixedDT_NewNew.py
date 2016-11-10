@@ -3112,7 +3112,7 @@ class LinearSystemHtdTotFixedDTNewNew(object):
 
         return positionPref
     #----------------------------------------------------------------------------------------------------
-    def _CapDiv_push_RBCs_forward_to_fit(self,dists,oes,positionPrefs):
+    def _CapDiv_compute_timeBlocked(self,dists,oes,positionPrefs):
         #TODO description
         """ Add one RBC to the positionPref for non capillary divergent bifurcations (vessel overshooting and 
         overlapping old RBCs and overlapping of propagated RBCs is considered)
