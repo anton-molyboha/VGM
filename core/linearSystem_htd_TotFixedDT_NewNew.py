@@ -1165,56 +1165,9 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                                             else:
                                                 print('BIGERROR all overshootRBCS should fit')
                                 #Check if RBCs have been pushed outwards, if so push forward
-                                if positionPref1 != []:
-                                    if oe['sign'] == 1:
-                                        if positionPref1[-1] < 0:
-                                            for i in xrange(-1,-1*(len(positionPref1)),-1):
-                                                if positionPref1[i-1]-positionPref1[i] < oe['minDist'] - eps:
-                                                    positionPref1[i-1]=positionPref1[i] + oe['minDist']
-                                                else:
-                                                    break
-                                    else:
-                                        if positionPref1[-1] > oe['length']:
-                                            positionPref1[-1] = oe['length']
-                                            for i in xrange(-1,-1*(len(positionPref1)),-1):
-                                                if positionPref1[i]-positionPref1[i-1] < oe['minDist'] - eps:
-                                                    positionPref1[i-1]=positionPref1[i] - oe['minDist']
-                                                else:
-                                                    break
-                                if positionPref2 != []:
-                                    if oe2['sign'] == 1:
-                                        if positionPref2[-1] < 0:
-                                            positionPref2[-1] = 0
-                                            for i in xrange(-1,-1*(len(positionPref2)),-1):
-                                                if positionPref2[i-1]-positionPref2[i] < oe2['minDist'] + eps:
-                                                    positionPref2[i-1]=positionPref2[i] + oe2['minDist']
-                                                else:
-                                                    break
-                                    else:
-                                        if positionPref2[-1] > oe2['length']:
-                                            positionPref2[-1] = oe2['length']
-                                            for i in xrange(-1,-1*(len(positionPref2)),-1):
-                                                if positionPref2[i]-positionPref2[i-1] < oe2['minDist'] + eps:
-                                                    positionPref2[i-1]=positionPref2[i] - oe2['minDist']
-                                                else:
-                                                    break
-                                if positionPref3 != []:
-                                    if oe3['sign'] == 1:
-                                        if positionPref3[-1] < 0:
-                                            positionPref3[-1] = 0
-                                            for i in xrange(-1,-1*(len(positionPref3)),-1):
-                                                if positionPref3[i-1]-positionPref3[i] < oe3['minDist'] + eps:
-                                                    positionPref3[i-1]=positionPref3[i] + oe3['minDist']
-                                                else:
-                                                    break
-                                    else:
-                                        if positionPref3[-1] > oe3['length']:
-                                            positionPref3[-1] = oe3['length']
-                                            for i in xrange(-1,-1*(len(positionPref3)),-1):
-                                                if positionPref3[i]-positionPref3[i-1] < oe3['minDist'] + eps:
-                                                    positionPref3[i-1]=positionPref3[i] - oe3['minDist']
-                                                else:
-                                                   break
+                                positionPref1=self._nonCapDiv_push_RBCs_forward_to_fit(oe,positionPref1)
+                                positionPref2=self._nonCapDiv_push_RBCs_forward_to_fit(oe2,positionPref2)
+                                positionPref3=self._nonCapDiv_push_RBCs_forward_to_fit(oe3,positionPref3)
                             else:
                                 #To begin with it is tried if all RBCs fit into the prefered outEdge. The time of arrival at the RBCs is take into account
                                 #RBCs which would be too close together are put into the other edge
@@ -2159,38 +2112,8 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                                                     count2 += 1
                                             else:
                                                 print('BIGERROR all overshootRBCS should fit')
-                                if positionPref1 != []:
-                                    if oe['sign'] == 1:
-                                        if positionPref1[-1] < 0:
-                                            positionPref1[-1] = 0
-                                            for i in xrange(-1,-1*(len(positionPref1)),-1):
-                                                if positionPref1[i-1]-positionPref1[i] < oe['minDist'] - eps:
-                                                    positionPref1[i-1]=positionPref1[i] + oe['minDist']
-                                                else:
-                                                    break
-                                    else:
-                                        if positionPref1[-1] > oe['length']:
-                                            positionPref1[-1] = oe['length']
-                                            for i in xrange(-1,-1*(len(positionPref1)),-1):
-                                                if positionPref1[i]-positionPref1[i-1] < oe['minDist'] + eps:
-                                                    positionPref1[i-1]=positionPref1[i] - oe['minDist']
-                                                else:
-                                                    break
-                                if positionPref2 != []:
-                                    if oe2['sign'] == 1:
-                                        if positionPref2[-1] < 0:
-                                            positionPref2[-1] = 0
-                                            for i in xrange(-1,-1*(len(positionPref2)),-1):
-                                                if positionPref2[i-1]-positionPref2[i] < oe2['minDist'] + eps:
-                                                    positionPref2[i-1]=positionPref2[i] + oe2['minDist']
-                                                else:
-                                                    break
-                                    else:
-                                        if positionPref2[-1] > oe2['length']:
-                                            positionPref2[-1] = oe2['length']
-                                            for i in xrange(-1,-1*(len(positionPref2)),-1):
-                                                if positionPref2[i]-positionPref2[i-1] < oe2['minDist'] + eps:
-                                                    positionPref2[i-1]=positionPref2[i] - oe2['minDist']
+                                positionPref1=self._nonCapDiv_push_RBCs_forward_to_fit(oe,positionPref1)
+                                positionPref2=self._nonCapDiv_push_RBCs_forward_to_fit(oe2,positionPref2)
                             else:
                                 #To begin with it is tried if all RBCs fit into the prefered outEdge. The time of arrival at the RBCs is taken into account
                                 #RBCs which would be too close together are put into the other edge
@@ -3156,7 +3079,118 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                         positionPref.append(position[index])
 
         return positionPref
-    #--------------------------------------------------------------------------
+
+    #----------------------------------------------------------------------------------------------------
+    def _nonCapDiv_push_RBCs_forward_to_fit(self,oe,positionPref):
+        #TODO description
+        """ Add one RBC to the positionPref for non capillary divergent bifurcations (vessel overshooting and 
+        overlapping old RBCs and overlapping of propagated RBCs is considered)
+        INPUT: oe: outEdge in which the RBCs should be placed
+               position: unconstrained postion of RBCs in the new outEdge
+               positionPref: unconstrained position of RBCs in the new outEdge
+               index: idnex of the RBC which is currently under investigation
+        OUTPUT: positionPref: updated list of positionPref
+        """
+        eps=self._eps
+        if positionPref != []:
+            if oe['sign'] == 1:
+                if positionPref[-1] < 0:
+                    positionPref[-1] = 0.0
+                    for i in xrange(-1,-1*(len(positionPref)),-1):
+                        if positionPref[i-1]-positionPref[i] < oe['minDist'] - eps:
+                            positionPref[i-1]=positionPref[i] + oe['minDist']
+                        else:
+                            break
+            else:
+                if positionPref[-1] > oe['length']:
+                    positionPref[-1] = oe['length']
+                    for i in xrange(-1,-1*(len(positionPref)),-1):
+                        if positionPref[i]-positionPref[i-1] < oe['minDist'] - eps:
+                            positionPref[i-1]=positionPref[i] - oe['minDist']
+                        else:
+                            break
+
+        return positionPref
+    #----------------------------------------------------------------------------------------------------
+    def _CapDiv_push_RBCs_forward_to_fit(self,dists,oes,positionPrefs):
+        #TODO description
+        """ Add one RBC to the positionPref for non capillary divergent bifurcations (vessel overshooting and 
+        overlapping old RBCs and overlapping of propagated RBCs is considered)
+        INPUT: oe: outEdge in which the RBCs should be placed
+               position: unconstrained postion of RBCs in the new outEdge
+               positionPref: unconstrained position of RBCs in the new outEdge
+               index: idnex of the RBC which is currently under investigation
+        OUTPUT: positionPref: updated list of positionPref
+        """
+        
+        timesBlocked=[None]*3
+        prefsFull=[0]*3
+
+        for j,positionPref,oe,dist in enumerate(positionPrefs,oes,dists): #TODO double check enumerate of two
+            if positionPref != None
+                space =  positionPref[-1] if oe['sign'] == 1.0 \
+                    else oe['length']-positionPref[-1]
+                if np.floor(space1/oe['minDist']) >= 1:
+                    timesBlocked[j]=(oe['minDist']-dist)/oe['v']
+                else:
+                    timesBlocked[j]=None
+                    prefsFull[j]=1
+            
+
+        space1 =  positionPref1[-1] if oe['sign'] == 1.0 \
+            else oe['length']-positionPref1[-1]
+        if np.floor(space1/oe['minDist']) >= 1:
+            timeBlocked1=(oe['minDist']-dist1)/oe['v']
+        else:
+            timeBlocked1=None
+            pref1Full=1
+        space2 =  positionPref2[-1] if oe2['sign'] == 1.0 \
+            else oe2['length']-positionPref2[-1]
+        if np.floor(space2/oe2['minDist']) >= 1:
+            timeBlocked2=(oe2['minDist']-dist2)/oe2['v']
+        else:
+            timeBlocked2=None
+            pref2Full=1
+        space3 =  positionPref3[-1] if oe3['sign'] == 1.0 \
+            else oe3['length']-positionPref3[-1]
+        if np.floor(space3/oe3['minDist']) >= 1:
+            timeBlocked3=(oe3['minDist']-dist3)/oe3['v']
+        else:
+            timeBlocked3=None
+            pref3Full=1
+        if pref1Full == 1 and pref2Full == 1 and pref3Full == 1:
+            break
+        #Define newOutEdge
+        newOutEdge=0
+        if timeBlocked1 == None: #2 or 3
+            if timeBlocked2 == None:
+                newOutEdge=3
+            elif timeBlocked3 == None:
+                newOutEdge=2
+            elif timeBlocked2 <= timeBlocked3:
+                newOutEdge=2
+            elif timeBlocked3 <= timeBlocked2:
+                newOutEdge=3
+        elif timeBlocked2 == None: #1 or 3
+            if timeBlocked3 == None:
+                newOutEdge=1
+            elif timeBlocked1 <= timeBlocked3:
+                newOutEdge=1
+            elif timeBlocked3 <= timeBlocked1:
+                newOutEdge=3
+        elif timeBlocked3 == None: #1 or 2
+            if timeBlocked2 <= timeBlocked1:
+                newOutEdge=2
+            elif timeBlocked1 <= timeBlocked2:
+                newOutEdge=1
+        else:
+            if np.min([timeBlocked1,timeBlocked2,timeBlocked3]) == timeBlocked1:
+                newOutEdge=1
+            elif np.min([timeBlocked1,timeBlocked2,timeBlocked3]) == timeBlocked2:
+                newOutEdge=2
+            elif np.min([timeBlocked1,timeBlocked2,timeBlocked3]) == timeBlocked3:
+                newOutEdge=3
+#--------------------------------------------------------------------------
     #@profile
     def evolve(self, time, method, dtfix,**kwargs):
         """Solves the linear system A x = b using a direct or AMG solver.
