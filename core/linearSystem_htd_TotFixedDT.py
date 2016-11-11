@@ -1978,14 +1978,14 @@ class LinearSystemHtdTotFixedDT(object):
                                                                     #Check if another RBCs still fits into the vessel
                                                                     space1 =  positionPref1[-1] if oe['sign'] == 1.0 \
                                                                         else oe['length']-positionPref1[-1]
-                                                                    if np.floor(space1/oe['minDist']) > 1:
+                                                                    if np.floor(space1/oe['minDist']) >= 1:
                                                                         timeBlocked1=(oe['minDist']-dist1)/oe['v']
                                                                     else:
                                                                         timeBlocked1=None
                                                                         pref1Full=1
                                                                     space2 =  positionPref2[-1] if oe2['sign'] == 1.0 \
                                                                         else oe2['length']-positionPref2[-1]
-                                                                    if np.floor(space2/oe2['minDist']) > 1:
+                                                                    if np.floor(space2/oe2['minDist']) >= 1:
                                                                         timeBlocked2=(oe2['minDist']-dist2)/oe2['v']
                                                                     else:
                                                                         timeBlocked2=None
@@ -2039,14 +2039,14 @@ class LinearSystemHtdTotFixedDT(object):
                                                                 #Check if another RBCs still fits into the vessel
                                                                 space1 =  positionPref1[-1] if oe['sign'] == 1.0 \
                                                                     else oe['length']-positionPref1[-1]
-                                                                if np.floor(space1/oe['minDist']) > 1:
+                                                                if np.floor(space1/oe['minDist']) >= 1:
                                                                     timeBlocked1=(oe['minDist']-dist1)/oe['v']
                                                                 else:
                                                                     timeBlocked1=None
                                                                     pref1Full=1
                                                                 space2 =  positionPref2[-1] if oe2['sign'] == 1.0 \
                                                                     else oe2['length']-positionPref2[-1]
-                                                                if np.floor(space2/oe2['minDist']) > 1:
+                                                                if np.floor(space2/oe2['minDist']) >= 1:
                                                                     timeBlocked2=(oe2['minDist']-dist2)/oe2['v']
                                                                 else:
                                                                     timeBlocked2=None
@@ -2135,14 +2135,14 @@ class LinearSystemHtdTotFixedDT(object):
                                                                     #Check if another RBCs still fits into the vessel
                                                                     space1 =  positionPref1[-1] if oe['sign'] == 1.0 \
                                                                         else oe['length']-positionPref1[-1]
-                                                                    if np.floor(space1/oe['minDist']) > 1:
+                                                                    if np.floor(space1/oe['minDist']) >= 1:
                                                                         timeBlocked1=(oe['minDist']-dist1)/oe['v']
                                                                     else:
                                                                         timeBlocked1=None
                                                                         pref1Full=1
                                                                     space3 =  positionPref3[-1] if oe3['sign'] == 1.0 \
                                                                         else oe3['length']-positionPref3[-1]
-                                                                    if np.floor(space3/oe3['minDist']) > 1:
+                                                                    if np.floor(space3/oe3['minDist']) >= 1:
                                                                         timeBlocked3=(oe3['minDist']-dist3)/oe3['v']
                                                                     else:
                                                                         timeBlocked3=None
@@ -2304,14 +2304,14 @@ class LinearSystemHtdTotFixedDT(object):
                                                                 #Check if another RBCs still fits into the vessel
                                                                 space2 =  positionPref2[-1] if oe2['sign'] == 1.0 \
                                                                     else oe2['length']-positionPref2[-1]
-                                                                if np.floor(space2/oe2['minDist']) > 1:
+                                                                if np.floor(space2/oe2['minDist']) >= 1:
                                                                     timeBlocked2=(oe2['minDist']-dist2)/oe2['v']
                                                                 else:
                                                                     timeBlocked2=None
                                                                     pref2Full=1
                                                                 space3 =  positionPref3[-1] if oe3['sign'] == 1.0 \
                                                                     else oe3['length']-positionPref3[-1]
-                                                                if np.floor(space3/oe3['minDist']) > 1:
+                                                                if np.floor(space3/oe3['minDist']) >= 1:
                                                                     timeBlocked3=(oe3['minDist']-dist3)/oe3['v']
                                                                 else:
                                                                     timeBlocked3=None
@@ -3340,14 +3340,14 @@ class LinearSystemHtdTotFixedDT(object):
                                                             #Check if another RBCs still fits into the vessel
                                                             space1 =  positionPref1[-1] if oe['sign'] == 1.0 \
                                                                 else oe['length']-positionPref1[-1]
-                                                            if np.floor(space1/oe['minDist']) > 1:
+                                                            if np.floor(space1/oe['minDist']) >= 1:
                                                                 timeBlocked1=(oe['minDist']-dist1)/oe['v']
                                                             else:
                                                                 timeBlocked1=None
                                                                 pref1Full=1
                                                             space2 =  positionPref2[-1] if oe2['sign'] == 1.0 \
                                                                 else oe2['length']-positionPref2[-1]
-                                                            if np.floor(space2/oe2['minDist']) > 1:
+                                                            if np.floor(space2/oe2['minDist']) >= 1:
                                                                 timeBlocked2=(oe2['minDist']-dist2)/oe2['v']
                                                             else:
                                                                 timeBlocked2=None
