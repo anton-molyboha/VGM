@@ -960,11 +960,10 @@ class LinearSystemHtdTotFixedDT_NEW(object):
         OUTPUT: None
         """
         G = self._G
-        dt = self._dt # Time to propagate RBCs with current velocity.
+        dt = self._dt
         eps=self._eps
         Physiol = self._P
-	#No flow Edges are not considered for the propagation of RBCs
-        edgeList0=G.es(noFlow_eq=0).indices
+        edgeList0=G.es(noFlow_eq=0).indices #No flow Edges are not considered for the propagation of RBCs
         if self._analyzeBifEvents:
             rbcsMovedPerEdge=[]
             edgesWithMovedRBCs=[]
@@ -976,42 +975,28 @@ class LinearSystemHtdTotFixedDT_NEW(object):
         sortedE=zip(pOut,edgeList0)
         sortedE.sort()
         sortedE=[i[1] for i in sortedE]
-        convEdges2=[0]*G.ecount()
+        convEdges=[0]*G.ecount()
         edgeUpdate=[]   #Edges where the number of RBCs changed --> need to be updated
         vertexUpdate=[] #Vertices where the number of RBCs changed in adjacent edges --> need to be updated
         #SECOND step go through all edges from smallest to highest pressure and move RBCs
-        checkBool=0
         for ei in sortedE:
             noBifEvents = 0
             edgesInvolved=[] #all edges connected to the bifurcation vertex
             e = G.es[ei]
             sign=e['sign']
-            #Get bifurcation vertex
-            if sign == 1:
-                vi=e['target']
-            else:
-                vi=e['source']
+            vi = e['target'] if sign == 1 else vi=e['source']
             vertex=G.vs[vi]
             edgesInvolved=G.incident(vi)
             nRBCSumBefore = np.sum(G.es[edgesInvolved]['nRBC'])
             overshootsNo=0 #Reset - Number of overshoots acutally taking place (considers possible number of bifurcation events)
-            #If there is a BC for the edge new RBCs have to be introduced
-            #Check if the RBCs in the edge have been moved already (--> convergent bifurcation)
-            #Recheck if bifurcation vertex is a noFlow Vertex (vType=7)
-            boolHttEdge = 0
-            boolHttEdge2 = 0
-            boolHttEdge3 = 0
-            if convEdges2[ei] == 0 and vertex['vType'] != 7:
-            #Check if the RBCs in the edge have been moved already (--> convergent bifurcation)
-            #Recheck if bifurcation vertex is a noFlow Vertex (vType=7)
-                #If RBCs are present move all RBCs
+            #TODO what is the difference between noFlow vertices and noFlow edges? are both checks necessary
+            boolHttEdge, boolHttEdge2, boolHttEdge3 = 0,0,0
+            if convEdges[ei] == 0 and vertex['vType'] != 7:
                 bifRBCsIndex=self._initial_propagate_and_compute_bifRBCsIndex(e,sign)
                 noBifEvents=len(bifRBCsIndex)
-                #Convergent Edge without a bifurcation event
-                if noBifEvents == 0 and (vertex['vType']==4 or vertex['vType']==6):
-                    convEdges2[ei]=1
+                if vertex['vType']==4 or vertex['vType']==6:
+                    convEdges[ei]=1
                 #-------------------------------------------------------------------------------------------
-                #Check if a bifurcation event is taking place
                 if noBifEvents > 0:
                     if vertex['vType'] == 2: #OUTFLOW Vertex
                         overshootsNo=noBifEvents
@@ -1133,12 +1118,10 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                                 countPref1,countPref2,countPref3=0,0,0
                                 positionPref1,positionPref2,positionPref3=[],[],[]
                                 pref1Full,pref2Full,pref3Full=0,0,0
-                                #Loop over all movable RBCs (begin with RBC which overshot the most)
-                                for i in xrange(overshootsNo):
+                                for i in xrange(overshootsNo): #Loop over all movable RBCs (begin with RBC which overshot the most)
                                     index=-1*(i+1) if sign == 1.0 else i
                                     index1=-1*(i+1) if oe['sign'] == 1.0 else i
                                     index2=-1*(i+1) if oe2['sign'] == 1.0 else i
-                                    #The possible number of RBCs results from the distance the first RBC overshoots
                                     if boolTrifurcation:
                                         index3=-1*(i+1) if oe3['sign'] == 1.0 else i
                                     if posNoBifEventsPref > countPref1 and pref1Full == 0:
@@ -1297,42 +1280,32 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                         noStuckRBCs=len(bifRBCsIndex)-overshootsNo
                         self._push_stuckRBCs_back(e,noStuckRBCs)
                     #-------------------------------------------------------------------------------------------
-                    #if vertex is convergent vertex
-                    elif vertex['vType'] == 4:
+                    elif vertex['vType'] == 4: #CONVERGENT vertex
                         #print('CONVERGENT')
                         boolTrifurcation = 0
                         bifRBCsIndex1=bifRBCsIndex
                         noBifEvents1=noBifEvents
                         outE=vertex['outflowE'][0]
                         oe = G.es[outE]
-                        inflowEdges=vertex['inflowE']
-                        k=0
-                        for i in inflowEdges:
-                            if i == e.index:
-                                inE1=e.index
-                            else:
-                                if k == 0:
-                                    inE2=i
-                                    k = 1
-                                else:
-                                    inE3=i
+                        inflowEdges=vertex['inflowE'].remove(ei)
+                        inE2=inflowEdges[0]
                         e2=G.es[inE2]
                         sign2=e2['sign']
-                        #Move RBCs in second inEdge (if that has not been done already)
-                        if convEdges2[inE2] == 0:
-                            convEdges2[inE2]=1
+                        if convEdges[inE2] == 0:
+                            convEdges[inE2]=1
                             bifRBCsIndex2=self._initial_propagate_and_compute_bifRBCsIndex(e2,sign2)
                             noBifEvents2=len(bifRBCsIndex2)
                         else:
                             noBifEvents2=0
                             bifRBCsIndex2=[]
                         #Check if there is a third inEdge
-                        if len(inflowEdges) > 2:
+                        if len(inflowEdges) > 1:
                             boolTrifurcation = 1
+                            inE3=inflowEdges[1]
                             e3=G.es[inE3]
                             sign3=e3['sign']
-                            if convEdges2[inE3] == 0:
-                                convEdges2[inE3]=1
+                            if convEdges[inE3] == 0:
+                                convEdges[inE3]=1
                                 bifRBCsIndex3=self._initial_propagate_and_compute_bifRBCsIndex(e3,sign3)
                                 noBifEvents3=len(bifRBCsIndex3)
                             else:
@@ -1343,59 +1316,36 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                             noBifEvents3=0
                             boolTrifurcation = 0
                         posNoBifEvents=self._calculate_possible_number_of_BifEvents(oe)
-                        #If bifurcations are possible check how many overshoots there are at the inEdges
                         if posNoBifEvents > 0:
                             overshootTime1=self._compute_overshootTime(e,bifRBCsIndex1,sign)
-                            #TODO here an np array could also be used instead of a list, however rest of the
-                            #code should be adjusted accordingly, and it has to be guaranteed that dummy is an int
-                            dummy1=[1]*len(overshootTime1)
+                            dummy1=np.ones(noBifEvents1,dtype=np.int)
                             if noBifEvents2 > 0:
                                 overshootTime2=self._compute_overshootTime(e2,bifRBCsIndex2,sign2)
-                                dummy2=[2]*len(overshootTime2)
+                                dummy2=2*np.ones(noBifEvents2,dtype=np.int)
                             else:
                                 overshootDist2=[]
                                 overshootTime2=[]
-                                dummy2=[]
-                            if boolTrifurcation:
-                                if noBifEvents3 > 0:
-                                    overshootTime3=self._compute_overshootTime(e3,bifRBCsIndex3,sign3)
-                                    dummy3=[3]*len(overshootTime3)
-                                else:
-                                    overshootDist3=[]
-                                    overshootTime3=[]
-                                    dummy3=[]
+                                dummy2=np.array([],dtype=np.int)
+                            if boolTrifurcation and noBifEvents3 > 0:
+                                overshootTime3=self._compute_overshootTime(e3,bifRBCsIndex3,sign3)
+                                dummy3=3*np.ones(noBifEvents3,dtype=np.int)
                             else:
                                 overshootDist3=[]
                                 overshootTime3=[]
-                                dummy3=[]
-                            #Define which RBC arrive first, second, .. at convergent bifurcation
-                            overshootTimes=zip(np.concatenate([overshootTime1,overshootTime2,overshootTime3]),dummy1+dummy2+dummy3)
+                                dummy3=np.array([],dtype=np.int)
+                            overshootTimes=zip(np.concatenate([overshootTime1,overshootTime2,overshootTime3]),np.concatenate([dummy1,dummy2,dummy3]))
                             overshootTimes.sort()
-                            overshootTime=[]
-                            inEdge=[]
-                            count1=0
-                            count2=0
-                            count3=0
-                            if posNoBifEvents > len(overshootTimes):
-                                overshootsNo=len(overshootTimes)
-                            else:
-                                overshootsNo=int(posNoBifEvents)
-                            #position rbcs based on when they appear at bifurcation
-                            #TODO here an unzip might be the faster option than looping through the ziped list
-                            for i in xrange(-1*overshootsNo,0):
-                                overshootTime.append(overshootTimes[i][0])
-                                inEdge.append(overshootTimes[i][1])
-                            #Numbers of RBCs from corresponding inEdge
+                            overshootsNo=np.max([len(overshootTimes),posNoBifEvents])
+                            overshootTime,inEdge=zip(*overshootTimes)
+                            overshootTime=np.array(overshootTime)
                             count1=inEdge.count(1)
                             count2=inEdge.count(2)
                             count3=inEdge.count(3)
                             #position starts with least overshooting RBC and ends with highest overshooting RBC
-                            overshootTime=np.array(overshootTime)
                             position=self._compute_unconstrained_RBC_positions(oe,overshootTime,signConsidered=0)
                             position=self._check_overshootingNewVessel_and_overtakingRBCsInNewVessel(oe,position)
-                            #if first RBC did not yet move enough less than the possible no of RBCs fit into the outEdge
-                            allCounts=count1+count2+count3
-                            for i in xrange(allCounts):
+                            #TODO this loop should still be improved. faster way?
+                            for i in xrange(overshootsNo):
                                 if position[i] < 0:
                                     if inEdge[i] == 1:
                                         count1 += -1
@@ -1447,8 +1397,8 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                                 inE2=i
                         e2=G.es[inE2]
                         sign2=e2['sign']
-                        if convEdges2[inE2] == 0:
-                            convEdges2[inE2]=1
+                        if convEdges[inE2] == 0:
+                            convEdges[inE2]=1
                             bifRBCsIndex2=self._initial_propagate_and_compute_bifRBCsIndex(e2,sign2)
                             noBifEvents2=len(bifRBCsIndex2)
                         else:
@@ -2186,7 +2136,7 @@ class LinearSystemHtdTotFixedDT_NEW(object):
         """ Removes RBCs from current edge
         INPUT: oe: igraph edge to which RBCs should be propagated
          OUTPUT: posNoBifEvents: possible number of overshoots by the 
-                   by the constraints in the outEdge
+                   by the constraints in the outEdge (integer)
         """
 
         if len(oe['rRBC']) > 0:
