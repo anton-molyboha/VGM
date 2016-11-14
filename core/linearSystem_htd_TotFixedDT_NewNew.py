@@ -32,14 +32,14 @@ import run_faster
 import time as ttime
 import vgm
 
-__all__ = ['LinearSystemHtdTotFixedDTNewNew']
+__all__ = ['LinearSystemHtdTotFixedDT_NEW']
 log = vgm.LogDispatcher.create_logger(__name__)
 
 #------------------------------------------------------------------------------
 #------------------------------------------------------------------------------
 
 
-class LinearSystemHtdTotFixedDTNewNew(object):
+class LinearSystemHtdTotFixedDT_NEW(object):
     """The discrete model is extended such, that a fixed timestep is given. Hence,
     more than one RBC will move per time step.
     It is differentiated between capillaries and larger vessels. At larger Vessels 
@@ -306,9 +306,7 @@ class LinearSystemHtdTotFixedDTNewNew(object):
         print(self._eps)
         stdout.write("\rEstimated network turnover time Ttau=%f        \n" % G['Ttau'])
 
-            
     #--------------------------------------------------------------------------
-
     def _compute_mu_sigma_inlet_RBC_distribution(self, httBC):
         """Updates the nominal and specific resistance of a given edge 
         sequence.
@@ -1005,12 +1003,13 @@ class LinearSystemHtdTotFixedDTNewNew(object):
             if convEdges2[ei] == 0 and vertex['vType'] != 7:
             #Check if the RBCs in the edge have been moved already (--> convergent bifurcation)
             #Recheck if bifurcation vertex is a noFlow Vertex (vType=7)
+                #If RBCs are present move all RBCs
                 bifRBCsIndex=self._initial_propagate_and_compute_bifRBCsIndex(e,sign)
                 noBifEvents=len(bifRBCsIndex)
                 #Convergent Edge without a bifurcation event
                 if noBifEvents == 0 and (vertex['vType']==4 or vertex['vType']==6):
                     convEdges2[ei]=1
-        #-------------------------------------------------------------------------------------------
+                #-------------------------------------------------------------------------------------------
                 #Check if a bifurcation event is taking place
                 if noBifEvents > 0:
                     #If Edge is outlflow Edge --> remove RBCs
@@ -1020,16 +1019,18 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                         vertexUpdate.append(e['target'])
                         vertexUpdate.append(e['source'])
                         edgeUpdate.append(ei)
-            #-------------------------------------------------------------------------------------------
+                    #-------------------------------------------------------------------------------------------
                     #if vertex is connecting vertex
                     elif vertex['vType'] == 5:
+                        #print('CONNECTING')
                         oe=G.es[vertex['outflowE'][0]]
-                        #Calculate possible number of bifurcation Events
                         posNoBifEvents=self._calculate_possible_number_of_BifEvents(oe)
+                        #OvershootsNo: compare posNoBifEvents with noBifEvents
                         overshootsNo,posBifRBCsIndex=self._compare_noBifEvents_to_posNoBifEvents(\
                             posNoBifEvents,noBifEvents,bifRBCsIndex,sign)
                         if overshootsNo > 0:
                             overshootTime=self._compute_overshootTime(e,posBifRBCsIndex,sign)
+                            #position --> where the overshooting RBCs would be located in the outEdge
                             position=self._compute_unconstrained_RBC_positions(oe,overshootTime,signConsidered=0)
                             position=self._check_overshootingNewVessel_and_overtakingRBCsInNewVessel(oe,position)
                             overshootsNoReduce=(position<0).tolist().count(True)
@@ -1043,9 +1044,10 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                         #Deal with RBCs which could not be reassigned to the new edge because of a traffic jam
                         noStuckRBCs=len(bifRBCsIndex)-overshootsNo
                         self._push_stuckRBCs_back(e,noStuckRBCs)
-          #-------------------------------------------------------------------------------------------
+                    #-------------------------------------------------------------------------------------------
                     #if vertex is divergent vertex
                     elif vertex['vType'] == 3:
+                        #print('DIVERGENT')
                         outEdges=vertex['outflowE']
                         boolTrifurcation = 0
                         if len(outEdges) > 2:
@@ -1068,8 +1070,12 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                             else:
                                 ratio1 = Physiol.phase_separation_effect(G.es[preferenceList[0]]['flow']/e['flow'], \
                                     G.es[preferenceList[0]]['diameter'],G.es[preferenceList[1]]['diameter'],e['diameter'],e['htd'])
+                                #it can happen that ratio1 < 0.5 even if the flowRate is larger. in this case the preferenceList is changed
+                                if ratio1 < 0.5:
+                                    ratio1 = 1.0 - ratio1
+                                    preferenceList=preferenceList[::-1]
                                 ratio2 = 1.0 -  ratio1
-                                ratio3 = 0
+                                ratio3 = 0.
                         #Define prefered OutEdges based on bifurcation rule
                         outEPref=preferenceList[0]
                         outEPref2=preferenceList[1]
@@ -1078,26 +1084,32 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                         if boolTrifurcation:
                             outEPref3 = preferenceList[2]
                             oe3=G.es[outEPref3]
-                        #Possible number of bifEvens for each outEdge
                         posNoBifEventsPref=self._calculate_possible_number_of_BifEvents(oe)
                         posNoBifEventsPref2=self._calculate_possible_number_of_BifEvents(oe2)
                         #Calculate distance to first RBC for outEPref3 (if it exists)
-                        posNoBifEventsPref3=self._calculate_possible_number_of_BifEvents(oe3) if boolTrifurcation else 0
+                        if boolTrifurcation:
+                            posNoBifEventsPref3=self._calculate_possible_number_of_BifEvents(oe3)
+                        else:
+                            posNoBifEventsPref3 = 0
                         #Calculate total number of bifurcation events possible
                         posNoBifEvents=int(posNoBifEventsPref+posNoBifEventsPref2+posNoBifEventsPref3)
+                        #Compare possible number of bifurcation events with number of bifurcations taking place
                         overshootsNo,posBifRBCsIndex=self._compare_noBifEvents_to_posNoBifEvents(\
                             posNoBifEvents,noBifEvents,bifRBCsIndex,sign)
                         if nonCap:
                             overshootsNo1, overshootsNo2, overshootsNo3 = \
-                                self._nonCapDiv_compute_overshootNos_from_ratios(boolTrifurcation,overhsootsNo,ratio1,ratio2,ratio3)
-                            overshootsNo1,overshootsNo2,overhsootsNo3=self._nonCapDiv_compare_overshootNos_to_posBifEvents(\
-                                overhsootsNo1,overshootsNo2,overshootsNo3,posNoBifEventsPref,posNoBifEventsPref2,posNoBifEventsPref3)
+                                self._nonCapDiv_compute_overshootNos_from_ratios(boolTrifurcation,overshootsNo,ratio1,ratio2,ratio3)
+                            overshootsNo1,overshootsNo2,overshootsNo3=self._nonCapDiv_compare_overshootNos_to_posBifEvents(\
+                                overshootsNo1,overshootsNo2,overshootsNo3,posNoBifEventsPref,posNoBifEventsPref2,posNoBifEventsPref3,overshootsNo)
                             overshootsNo = int(overshootsNo1 + overshootsNo2 + overshootsNo3)
                             posNoBifEvents = overshootsNo
-                            posBifRBCsIndex=[posBifRBCsIndex[-posNoBifEvents::] if sign == 1.0 \
-                                else posBifRBCsIndex[:posNoBifEvents]]
+                            posBifRBCsIndex=posBifRBCsIndex[-posNoBifEvents::] if sign == 1.0 \
+                                else posBifRBCsIndex[:posNoBifEvents]
                         if overshootsNo > 0:
                             overshootTime=self._compute_overshootTime(e,posBifRBCsIndex,sign)
+                            #Calculate position of overshootRBCs in every outEdge
+                            #the values in position are stored such that they can directly concatenated with outE['rRBC']
+			                #flow direction of outEdge is considered
                             position1=self._compute_unconstrained_RBC_positions(oe,overshootTime,signConsidered=1)
                             position2=self._compute_unconstrained_RBC_positions(oe2,overshootTime,signConsidered=1)
                             if boolTrifurcation:
@@ -1164,10 +1176,10 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                                                 last = 2
                                             else:
                                                 print('BIGERROR all overshootRBCS should fit')
-                                #Check if RBCs have been pushed outwards, if so push forward
                                 positionPref1=self._nonCapDiv_push_RBCs_forward_to_fit(oe,positionPref1)
                                 positionPref2=self._nonCapDiv_push_RBCs_forward_to_fit(oe2,positionPref2)
-                                positionPref3=self._nonCapDiv_push_RBCs_forward_to_fit(oe3,positionPref3)
+                                if boolTrifurcation:
+                                    positionPref3=self._nonCapDiv_push_RBCs_forward_to_fit(oe3,positionPref3)
                             else:
                                 #To begin with it is tried if all RBCs fit into the prefered outEdge. The time of arrival at the RBCs is take into account
                                 #RBCs which would be too close together are put into the other edge
@@ -1222,59 +1234,10 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                                                                         #if there is not enough space in the third outEdge
                                                                         #Check in which edge the RBC is blocked the shortest time
                                                                         if dist3 < oe3['minDist']:
-                                                                            space1 =  positionPref1[-1] if oe['sign'] == 1.0 \
-                                                                                else oe['length']-positionPref1[-1]
-                                                                            if np.floor(space1/oe['minDist']) >= 1:
-                                                                                timeBlocked1=(oe['minDist']-dist1)/oe['v']
-                                                                            else:
-                                                                                timeBlocked1=None
-                                                                                pref1Full=1
-                                                                            space2 =  positionPref2[-1] if oe2['sign'] == 1.0 \
-                                                                                else oe2['length']-positionPref2[-1]
-                                                                            if np.floor(space2/oe2['minDist']) >= 1:
-                                                                                timeBlocked2=(oe2['minDist']-dist2)/oe2['v']
-                                                                            else:
-                                                                                timeBlocked2=None
-                                                                                pref2Full=1
-                                                                            space3 =  positionPref3[-1] if oe3['sign'] == 1.0 \
-                                                                                else oe3['length']-positionPref3[-1]
-                                                                            if np.floor(space3/oe3['minDist']) >= 1:
-                                                                                timeBlocked3=(oe3['minDist']-dist3)/oe3['v']
-                                                                            else:
-                                                                                timeBlocked3=None
-                                                                                pref3Full=1
-                                                                            if pref1Full == 1 and pref2Full == 1 and pref3Full == 1:
+                                                                            newOutEdge=self._CapDiv_compute_timeBlocked(\
+                                                                                    [dist1,dist2,dist3],[oe,oe2,oe3],[positionPref1,positionPref2,positionPref3])
+                                                                            if newOutEdge == -1:
                                                                                 break
-                                                                            #Define newOutEdge
-                                                                            newOutEdge=0
-                                                                            if timeBlocked1 == None: #2 or 3
-                                                                                if timeBlocked2 == None:
-                                                                                    newOutEdge=3
-                                                                                elif timeBlocked3 == None:
-                                                                                    newOutEdge=2
-                                                                                elif timeBlocked2 <= timeBlocked3:
-                                                                                    newOutEdge=2
-                                                                                elif timeBlocked3 <= timeBlocked2:
-                                                                                    newOutEdge=3
-                                                                            elif timeBlocked2 == None: #1 or 3
-                                                                                if timeBlocked3 == None:
-                                                                                    newOutEdge=1
-                                                                                elif timeBlocked1 <= timeBlocked3:
-                                                                                    newOutEdge=1
-                                                                                elif timeBlocked3 <= timeBlocked1:
-                                                                                    newOutEdge=3
-                                                                            elif timeBlocked3 == None: #1 or 2
-                                                                                if timeBlocked2 <= timeBlocked1:
-                                                                                    newOutEdge=2
-                                                                                elif timeBlocked1 <= timeBlocked2:
-                                                                                    newOutEdge=1
-                                                                            else:
-                                                                                if np.min([timeBlocked1,timeBlocked2,timeBlocked3]) == timeBlocked1:
-                                                                                    newOutEdge=1
-                                                                                elif np.min([timeBlocked1,timeBlocked2,timeBlocked3]) == timeBlocked2:
-                                                                                    newOutEdge=2
-                                                                                elif np.min([timeBlocked1,timeBlocked2,timeBlocked3]) == timeBlocked3:
-                                                                                    newOutEdge=3
                                                                             if newOutEdge == 1:
                                                                                 if oe['sign'] == 1.0:
                                                                                     #TODO why has position 1 to be updated?
@@ -1334,34 +1297,10 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                                                                         countPref3 += 1
                                                                 #There is no spcae in the third outEdge anymore
                                                                 else:
-                                                                    #Check if another RBCs still fits into the vessel
-                                                                    space1 =  positionPref1[-1] if oe['sign'] == 1.0 \
-                                                                        else oe['length']-positionPref1[-1]
-                                                                    if np.floor(space1/oe['minDist']) > 1:
-                                                                        timeBlocked1=(oe['minDist']-dist1)/oe['v']
-                                                                    else:
-                                                                        timeBlocked1=None
-                                                                        pref1Full=1
-                                                                    space2 =  positionPref2[-1] if oe2['sign'] == 1.0 \
-                                                                        else oe2['length']-positionPref2[-1]
-                                                                    if np.floor(space2/oe2['minDist']) > 1:
-                                                                        timeBlocked2=(oe2['minDist']-dist2)/oe2['v']
-                                                                    else:
-                                                                        timeBlocked2=None
-                                                                        pref2Full=1
-                                                                    if pref1Full == 1 and pref2Full == 1:
+                                                                    newOutEdge=self._CapDiv_compute_timeBlocked(\
+                                                                        [dist1,dist2,None],[oe,oe2,None],[positionPref1,positionPref2,None])
+                                                                    if newOutEdge == -1:
                                                                         break
-                                                                    #Define newOutEdge
-                                                                    newOutEdge=0
-                                                                    if timeBlocked1 == None:
-                                                                        newOutEdge=2
-                                                                    elif timeBlocked2 == None:
-                                                                        newOutEdge=1
-                                                                    else:
-                                                                        if timeBlocked1 <= timeBlocked2:
-                                                                            newOutEdge=1
-                                                                        else:
-                                                                            newOutEdge=2
                                                                     if newOutEdge == 1:
                                                                         if oe['sign'] == 1.0:
                                                                             position1[index1]=positionPref1[-1]-oe['minDist']
@@ -1383,34 +1322,10 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                                                             #There is no third outEdge, therefore it is checked in which edge the RBC is blocked
                                                             #the shortest time
                                                             else:
-                                                                #Check if another RBCs still fits into the vessel
-                                                                space1 =  positionPref1[-1] if oe['sign'] == 1.0 \
-                                                                    else oe['length']-positionPref1[-1]
-                                                                if np.floor(space1/oe['minDist']) > 1:
-                                                                    timeBlocked1=(oe['minDist']-dist1)/oe['v']
-                                                                else:
-                                                                    timeBlocked1=None
-                                                                    pref1Full=1
-                                                                space2 =  positionPref2[-1] if oe2['sign'] == 1.0 \
-                                                                    else oe2['length']-positionPref2[-1]
-                                                                if np.floor(space2/oe2['minDist']) > 1:
-                                                                    timeBlocked2=(oe2['minDist']-dist2)/oe2['v']
-                                                                else:
-                                                                    timeBlocked2=None
-                                                                    pref2Full=1
-                                                                if pref1Full == 1 and pref2Full == 1:
+                                                                newOutEdge=self._CapDiv_compute_timeBlocked(\
+                                                                    [dist1,dist2,None],[oe,oe2,None],[positionPref1,positionPref2,None])
+                                                                if newOutEdge == -1:
                                                                     break
-                                                                #Define newOutEdge
-                                                                newOutEdge=0
-                                                                if timeBlocked1 == None:
-                                                                    newOutEdge=2
-                                                                elif timeBlocked2 == None:
-                                                                    newOutEdge=1
-                                                                else:
-                                                                    if timeBlocked1 <= timeBlocked2:
-                                                                        newOutEdge=1
-                                                                    else:
-                                                                        newOutEdge=2
                                                                 if newOutEdge == 1:
                                                                     if oe['sign'] == 1.0:
                                                                         position1[index1]=positionPref1[-1]-oe['minDist']
@@ -1467,34 +1382,10 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                                                                 dist3=positionPref3[-1]-position3[index3] if oe3['sign'] == 1.0 \
                                                                     else position3[index3]-positionPref3[-1]
                                                                 if dist3 < oe3['minDist']:
-                                                                    #Check if another RBCs still fits into the vessel
-                                                                    space1 =  positionPref1[-1] if oe['sign'] == 1.0 \
-                                                                        else oe['length']-positionPref1[-1]
-                                                                    if np.floor(space1/oe['minDist']) > 1:
-                                                                        timeBlocked1=(oe['minDist']-dist1)/oe['v']
-                                                                    else:
-                                                                        timeBlocked1=None
-                                                                        pref1Full=1
-                                                                    space3 =  positionPref3[-1] if oe3['sign'] == 1.0 \
-                                                                        else oe3['length']-positionPref3[-1]
-                                                                    if np.floor(space3/oe3['minDist']) > 1:
-                                                                        timeBlocked3=(oe3['minDist']-dist3)/oe3['v']
-                                                                    else:
-                                                                        timeBlocked3=None
-                                                                        pref3Full=1
-                                                                    if pref1Full == 1 and pref3Full == 1:
+                                                                    newOutEdge=self._CapDiv_compute_timeBlocked(\
+                                                                        [dist1,None,dist3],[oe,None,oe3],[positionPref1,None,positionPref3])
+                                                                    if newOutEdge == -1:
                                                                         break
-                                                                    #Define newOutEdge
-                                                                    newOutEdge=0
-                                                                    if timeBlocked1 == None:
-                                                                        newOutEdge=3
-                                                                    elif timeBlocked3 == None:
-                                                                        newOutEdge=1
-                                                                    else:
-                                                                        if timeBlocked1 <= timeBlocked3:
-                                                                            newOutEdge=1
-                                                                        else:
-                                                                            newOutEdge=3
                                                                     if newOutEdge == 1:
                                                                         if oe['sign'] == 1.0:
                                                                             position1[index1]=positionPref1[-1]-oe['minDist']
@@ -1624,34 +1515,10 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                                                             #if there is not enough space in the third outEdge
                                                             #Check in which edge the RBC is blocked the shortest time
                                                             if dist3 < oe3['minDist']:
-                                                                #Check if another RBCs still fits into the vessel
-                                                                space2 =  positionPref2[-1] if oe2['sign'] == 1.0 \
-                                                                    else oe2['length']-positionPref2[-1]
-                                                                if np.floor(space2/oe2['minDist']) > 1:
-                                                                    timeBlocked2=(oe2['minDist']-dist2)/oe2['v']
-                                                                else:
-                                                                    timeBlocked2=None
-                                                                    pref2Full=1
-                                                                space3 =  positionPref3[-1] if oe3['sign'] == 1.0 \
-                                                                    else oe3['length']-positionPref3[-1]
-                                                                if np.floor(space3/oe3['minDist']) > 1:
-                                                                    timeBlocked3=(oe3['minDist']-dist3)/oe3['v']
-                                                                else:
-                                                                    timeBlocked3=None
-                                                                    pref3Full=1
-                                                                if pref2Full == 1 and pref3Full == 1:
+                                                                newOutEdge=self._CapDiv_compute_timeBlocked(\
+                                                                    [None,dist2,dist3],[None,oe2,oe3],[None,positionPref2,positionPref3])
+                                                                if newOutEdge == -1:
                                                                     break
-                                                                #Define newOutEdge
-                                                                newOutEdge=0
-                                                                if timeBlocked2 == None:
-                                                                    newOutEdge=3
-                                                                elif timeBlocked3 == None:
-                                                                    newOutEdge=2
-                                                                else:
-                                                                    if timeBlocked2 <= timeBlocked3:
-                                                                        newOutEdge=2
-                                                                    else:
-                                                                        newOutEdge=3
                                                                 if newOutEdge == 2:
                                                                     if oe2['sign'] == 1.0:
                                                                         position2[index2]=positionPref2[-1]-oe2['minDist']
@@ -1815,10 +1682,9 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                                 else:
                                     if countPref2+countPref1 != overshootsNo:
                                         overshootsNo = countPref2+countPref1
-                            #add RBCs to outEPref1
+                            #add and remove RBCs
                             oe['countRBCs']+=len(positionPref1)
                             oe2['countRBCs']+=len(positionPref2)
-                            #TODO double check the resulting positionPref, are they realy in the right order?
                             self._move_RBCs(oe,positionPref1[::-1],signConsidered=1)
                             self._move_RBCs(oe2,positionPref2[::-1],signConsidered=1)
                             if len(outEdges) >2:
@@ -1828,9 +1694,10 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                         #Deal with RBCs which could not be reassigned to the new edge because of a traffic jam
                         noStuckRBCs=len(bifRBCsIndex)-overshootsNo
                         self._push_stuckRBCs_back(e,noStuckRBCs)
-    #-------------------------------------------------------------------------------------------
-                #if vertex is convergent vertex
+                    #-------------------------------------------------------------------------------------------
+                    #if vertex is convergent vertex
                     elif vertex['vType'] == 4:
+                        #print('CONVERGENT')
                         boolTrifurcation = 0
                         bifRBCsIndex1=bifRBCsIndex
                         noBifEvents1=noBifEvents
@@ -1848,8 +1715,8 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                                 else:
                                     inE3=i
                         e2=G.es[inE2]
-                        #Move RBCs in second inEdge (if that has not been done already)
                         sign2=e2['sign']
+                        #Move RBCs in second inEdge (if that has not been done already)
                         if convEdges2[inE2] == 0:
                             convEdges2[inE2]=1
                             bifRBCsIndex2=self._initial_propagate_and_compute_bifRBCsIndex(e2,sign2)
@@ -1858,7 +1725,6 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                             noBifEvents2=0
                             bifRBCsIndex2=[]
                         #Check if there is a third inEdge
-                        #TODO computation of bifRBCsIndex should be a function
                         if len(inflowEdges) > 2:
                             boolTrifurcation = 1
                             e3=G.es[inE3]
@@ -1874,11 +1740,12 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                             bifRBCsIndex3=[]
                             noBifEvents3=0
                             boolTrifurcation = 0
-                        #Possible number of bifurcation Events per outEdge
                         posNoBifEvents=self._calculate_possible_number_of_BifEvents(oe)
                         #If bifurcations are possible check how many overshoots there are at the inEdges
                         if posNoBifEvents > 0:
                             overshootTime1=self._compute_overshootTime(e,bifRBCsIndex1,sign)
+                            #TODO here an np array could also be used instead of a list, however rest of the
+                            #code should be adjusted accordingly, and it has to be guaranteed that dummy is an int
                             dummy1=[1]*len(overshootTime1)
                             if noBifEvents2 > 0:
                                 overshootTime2=self._compute_overshootTime(e2,bifRBCsIndex2,sign2)
@@ -1912,6 +1779,7 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                             else:
                                 overshootsNo=int(posNoBifEvents)
                             #position rbcs based on when they appear at bifurcation
+                            #TODO here an unzip might be the faster option than looping through the ziped list
                             for i in xrange(-1*overshootsNo,0):
                                 overshootTime.append(overshootTimes[i][0])
                                 inEdge.append(overshootTimes[i][1])
@@ -1923,9 +1791,8 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                             overshootTime=np.array(overshootTime)
                             position=self._compute_unconstrained_RBC_positions(oe,overshootTime,signConsidered=0)
                             position=self._check_overshootingNewVessel_and_overtakingRBCsInNewVessel(oe,position)
-                            #Position of the following RBCs is changed, such that they do not overlap
-                            allCounts=count1+count2+count3
                             #if first RBC did not yet move enough less than the possible no of RBCs fit into the outEdge
+                            allCounts=count1+count2+count3
                             for i in xrange(allCounts):
                                 if position[i] < 0:
                                     if inEdge[i] == 1:
@@ -1942,15 +1809,12 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                             #Add rbcs to outE
                             oe['countRBCs']+=len(position)
                             self._move_RBCs(oe,position,signConsidered=0)
-                            #Remove RBCs from old Edge 1
                             if count1 > 0:
                                 self._remove_RBCs(e,count1)
                             if noBifEvents2 > 0 and count2 > 0:
-                                #Remove RBCs from old Edge 2
                                 self._remove_RBCs(e2,count2)
                             if boolTrifurcation:
                                 if noBifEvents3 > 0 and count3 > 0:
-                                    #Remove RBCs from old Edge 3
                                     self._remove_RBCs(e3,count3)
                             overshootsNo = count1 + count2 + count3
                         else:
@@ -1958,21 +1822,19 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                             count2=0
                             count3=0
                         #Deal with RBCs which could not be reassigned to the new edge because of a traffic jam
-                        #InEdge 1
                         noStuckRBCs1=len(bifRBCsIndex1)-count1
                         self._push_stuckRBCs_back(e,noStuckRBCs1)
-                        #Deal with RBCs which could not be reassigned to the new edge because of a traffic jam
                         #InEdge 2
                         noStuckRBCs2=len(bifRBCsIndex2)-count2
                         self._push_stuckRBCs_back(e2,noStuckRBCs2)
-                        #Deal with RBCs which could not be reassigned to the new edge because of a traffic jam
                         #InEdge 3
                         if boolTrifurcation:
                             noStuckRBCs3=len(bifRBCsIndex3)-count3
                             self._push_stuckRBCs_back(e3,noStuckRBCs3)
-         #------------------------------------------------------------------------------------------
+                    #------------------------------------------------------------------------------------------
                     #if vertex is double connecting vertex
                     elif vertex['vType'] == 6:
+                        #print('DOUBLE')
                         bifRBCsIndex1=bifRBCsIndex
                         noBifEvents1=noBifEvents
                         inflowEdges=vertex['inflowE']
@@ -2001,13 +1863,16 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                             preferenceList = [x[1] for x in sorted(zip(G.es[outEdges]['flow'], outEdges), reverse=True)]
                             ratio1 = Physiol.phase_separation_effect(G.es[preferenceList[0]]['flow']/np.sum(G.es[outEdges]['flow']), \
                                 G.es[preferenceList[0]]['diameter'],G.es[preferenceList[1]]['diameter'],e['diameter'],e['htd'])
+                            #it can happen that ratio1 < 0.5 even if the flowRate is larger. in this case the preferenceList is changed
+                            if ratio1 < 0.5:
+                                ratio1 = 1.0 - ratio1
+                                preferenceList=preferenceList[::-1]
                             ratio2 = 1.0 -  ratio1
                         #Define prefered OutEdges
                         outEPref=preferenceList[0]
                         outEPref2=preferenceList[1]
                         oe=G.es[outEPref]
                         oe2=G.es[outEPref2]
-                        #Calculate distance to first RBC
                         posNoBifEventsPref=self._calculate_possible_number_of_BifEvents(oe)
                         posNoBifEventsPref2=self._calculate_possible_number_of_BifEvents(oe2)
                         #Check how many RBCs fit into the new Vessel
@@ -2015,16 +1880,17 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                         noBifEvents = noBifEvents1 + noBifEvents2
                         overshootsNo=noBifEvents
                         if nonCap:
-                            overshootsNo1,overshootsNo2,overshootsNo3Dummy = \
-                                self._nonCapDiv_compute_overshootNos_from_ratios(0,overhsootsNo,ratio1,ratio2,ratio3)
-                            overshootsNo1,overshootsNo2,overshootsNo3Dummy=self._nonCapDiv_compare_overshootNos_to_posBifEvents(\
-                                overhsootsNo1,overshootsNo2,0,posNoBifEventsPref,posNoBifEventsPref2,0)
+                            overshootsNo1,overshootsNo2,overshootsNo3 = \
+                                self._nonCapDiv_compute_overshootNos_from_ratios(0,overshootsNo,ratio1,ratio2,0.)
+                            overshootsNo1,overshootsNo2,overshootsNo3=self._nonCapDiv_compare_overshootNos_to_posBifEvents(\
+                                overshootsNo1,overshootsNo2,0,posNoBifEventsPref,posNoBifEventsPref2,0,overshootsNo)
                             overshootsNo = int(overshootsNo1 + overshootsNo2)
                             posNoBifEvents = overshootsNo
                         #Calculate number of bifEvents
                         #If bifurcations are possible check how many overshoots there are at the inEdges
                         if posNoBifEvents > 0:
                             overshootTime1=self._compute_overshootTime(e,bifRBCsIndex1,sign)
+                            #TODO here also numpy arrays could be used, same as for convergent bifurcations
                             dummy1=[1]*len(overshootTime1)
                             if noBifEvents2 > 0:
                                 overshootTime2=self._compute_overshootTime(e2,bifRBCsIndex2,sign2)
@@ -2051,8 +1917,8 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                             if nonCap:
                                 countNo1=0
                                 countNo2=0
-		                        count1 = 0
-		                        count2 = 0
+                                count1 = 0
+                                count2 = 0
                                 inEPref1=[]
                                 inEPref2=[]
                                 indexPref1=[]
@@ -2130,8 +1996,8 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                                 countPref2=0
                                 pref1Full = 0
                                 pref2Full = 0
-		                count1 = 0
-		                count2 = 0
+                                count1 = 0
+                                count2 = 0
                                 #Loop over all movable RBCs
                                 for i in xrange(overshootsNo):
                                     index=-1*(i+1)
@@ -2154,34 +2020,10 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                                                         #Check if there is enough space in 2nd outEdge
                                                         #in case there is not enough space, check where the RBC is blocked the least amount of time
                                                         if dist2 < oe2['minDist']:
-                                                            #Check if another RBCs still fits into the vessel
-                                                            space1 =  positionPref1[-1] if oe['sign'] == 1.0 \
-                                                                else oe['length']-positionPref1[-1]
-                                                            if np.floor(space1/oe['minDist']) > 1:
-                                                                timeBlocked1=(oe['minDist']-dist1)/oe['v']
-                                                            else:
-                                                                timeBlocked1=None
-                                                                pref1Full=1
-                                                            space2 =  positionPref2[-1] if oe2['sign'] == 1.0 \
-                                                                else oe2['length']-positionPref2[-1]
-                                                            if np.floor(space2/oe2['minDist']) > 1:
-                                                                timeBlocked2=(oe2['minDist']-dist2)/oe2['v']
-                                                            else:
-                                                                timeBlocked2=None
-                                                                pref2Full=1
-                                                            if pref1Full == 1 and pref2Full == 1:
+                                                            newOutEdge=self._CapDiv_compute_timeBlocked(\
+                                                                [dist1,dist2,None],[oe,oe2,None],[positionPref1,positionPref2,None])
+                                                            if newOutEdge == -1:
                                                                 break
-                                                            #Define newOutEdge
-                                                            newOutEdge=0
-                                                            if timeBlocked1 == None:
-                                                                newOutEdge=2
-                                                            elif timeBlocked2 == None:
-                                                                newOutEdge=1
-                                                            else:
-                                                                if timeBlocked1 <= timeBlocked2:
-                                                                    newOutEdge=1
-                                                                else:
-                                                                    newOutEdge=2
                                                             if newOutEdge == 1:
                                                                 if oe['sign'] == 1.0:
                                                                     position1[index1]=positionPref1[-1]-oe['minDist']
@@ -2404,6 +2246,7 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                             #Add rbcs to outEPref2       
                             oe2['countRBCs']+=len(positionPref2)
                             self._move_RBCs(oe2,positionPref2[::-1],signConsidered=1)
+                            #Remove RBCs from old Edge 1
                             if count1 > 0:
                                 self._remove_RBCs(e,count1)
                             if noBifEvents2 > 0 and count2 > 0:
@@ -2418,7 +2261,6 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                         #InEdge 1
                         noStuckRBCs1=len(bifRBCsIndex1)-count1
                         self._push_stuckRBCs_back(e,noStuckRBCs1)
-                        #Deal with RBCs which could not be reassigned to the new edge because of a traffic jam
                         #InEdge 2
                         if noBifEvents2 > 0:
                             noStuckRBCs2=len(bifRBCsIndex2)-count2
@@ -2681,6 +2523,11 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                     for j in xrange(len(edge['rRBC'])-1):
                         if edge['rRBC'][j] > edge['rRBC'][j+1] or edge['rRBC'][j+1]-edge['rRBC'][j] < edge['minDist']-100*eps:
                             print('BIGERROR BEGINNING END 3')
+                            print(vertex['vType'])
+                            print(edge['rRBC'][j] > edge['rRBC'][j+1])
+                            print(edge['rRBC'][j+1]-edge['rRBC'][j] < edge['minDist']-100*eps)
+                            print(edge['rRBC'][j])
+                            print(edge['rRBC'][j+1])
             if overshootsNo != 0:
                 vertexUpdate.append(e['target'])
                 vertexUpdate.append(e['source'])
@@ -2709,7 +2556,7 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                             if count3 > 0:
                                 rbcMoved += count3
                 if self._analyzeBifEvents:
-                    if vertex['vType'] == 3 or vertex['vType']== 5:
+                    if vertex['vType'] == 3 or vertex['vType'] == 5:
                         rbcsMovedPerEdge.append(overshootsNo)
                         edgesWithMovedRBCs.append(e.index)
                     elif vertex['vType'] == 6:
@@ -2742,40 +2589,6 @@ class LinearSystemHtdTotFixedDTNewNew(object):
             self._rbcMoveAll.append(rbcMoved)
         self._G=G
     #--------------------------------------------------------------------------
-    def _move_RBCs(self,oe,position,signConsidered=0):
-        """ Puts RBCs into new outEdge
-        INPUT: oe: igraph edge to which the RBCs should be added
-               position: position of the RBCs in the new edge (should start with
-                   the value closest to 0 and increase) 
-               overshootsNo: number of RBCs which overshoot (only needed for signConsidered=0)
-               signConsidered: (default = 0) 
-                   if = 0: the operation length - position[::-1] is performed (for sign=-1)
-                   if = 1: otherwise only the operation position[::-1] is performed (for sign=-1)
-         OUTPUT: updated edge property rRBC
-        """
-        if oe['sign'] == 1.0:
-            oe['rRBC']=np.concatenate([position, oe['rRBC']])
-        else:
-            if not signConsidered:
-                position = oe['length'] - position[::-1]
-            else:
-                positon = position[::-1]
-            oe['rRBC']=np.concatenate([oe['rRBC'],position])
-
-    #--------------------------------------------------------------------------
-    def _remove_RBCs(self,e,overshootsNo):
-        """ Removes RBCs from current edge
-        INPUT: e: igraph edge from which the RBCs should be removed
-               overshootsNo: number of RBCs which overshoot
-         OUTPUT: updated edge property 'rRBC'
-        """
-        #Remove RBCs from old Edge
-        if sign == 1.0:
-            e['rRBC']=e['rRBC'][:-overshootsNo]
-        else:
-            e['rRBC']=e['rRBC'][overshootsNo::]
-
-    #--------------------------------------------------------------------------
     def _initial_propagate_and_compute_bifRBCsIndex(self,e,sign):
         """ Calculates bifRBCsIndex
         INPUT: e: igraph edge where the RBCs are propagated and for which bifRBCsIndex
@@ -2788,17 +2601,72 @@ class LinearSystemHtdTotFixedDTNewNew(object):
             e['rRBC'] = e['rRBC'] + e['v'] * self._dt * sign
             if sign == 1.0:
                 if e['rRBC'][-1] > e['length']:
-                    bifRBCsIndex=range((np.array(e['rRBC'])>e['length']).tolist().index(True),len(e['nRBC']))
+                    bifRBCsIndex=range((np.array(e['rRBC'])>e['length']).tolist().index(True),len(e['rRBC']))
+                else:
+                    bifRBCsIndex=[]
             else:
                 if e['rRBC'][0] < 0:
-                    try: 
+                    try:
                         bifRBCsIndex=range(0,(e['rRBC']<0.).tolist().index(False))
                     except:
-                        bifRBCsIndex=range(len(e['nRBC']))
+                        bifRBCsIndex=range(len(e['rRBC']))
+                else:
+                    bifRBCsIndex=[]
         else:
             bifRBCsIndex=[]
 
         return bifRBCsIndex
+
+    #--------------------------------------------------------------------------
+    def _move_RBCs(self,oe,position,signConsidered=0):
+        """ Puts RBCs into new outEdge
+        INPUT: oe: igraph edge to which the RBCs should be added
+               position: position of the RBCs in the new edge (should start with
+                   the value closest to 0 and increase) 
+               signConsidered: (default = 0) 
+                   if = 0: the operation length - position[::-1] is performed (for sign=-1)
+                   if = 1: otherwise only the operation position[::-1] is performed (for sign=-1)
+         OUTPUT: updated edge property rRBC
+        """
+        if oe['sign'] == 1.0:
+            oe['rRBC']=np.concatenate([position, oe['rRBC']])
+        else:
+            if not signConsidered:
+                position =oe['length'] - position[::-1]
+            else:
+                position = position[::-1]
+            oe['rRBC']=np.concatenate([oe['rRBC'],position])
+
+    #--------------------------------------------------------------------------
+    def _compute_overshootTime(self,e,posBifRBCsIndex,sign):
+        """ Removes RBCs from current edge
+        INPUT: e: igraph edge to which RBCs should be propagated
+               posBifRBCsIndex: RBC indices of the possible bifurcations events
+               sign: sign of the edge
+         OUTPUT: overshootDist: distance which RBCs overshooted (0 --> max(overshootDist))
+                 overshootTime: time which the RBCs overshoot (0 --> max(overshootTime))
+        """
+        #overshootsDist --> array with the distances which the RBCs overshoot, 
+        #starts wiht the RBC which overshoots the least 
+        overshootDist=e['rRBC'][posBifRBCsIndex]-e['length'] if sign == 1.0 \
+            else (0.-e['rRBC'][posBifRBCsIndex])[::-1]
+        #overshootTime --> time which every RBCs overshoots
+        overshootTime=overshootDist/e['v']                   
+
+        return overshootTime
+
+    #--------------------------------------------------------------------------
+    def _remove_RBCs(self,e,overshootsNo):
+        """ Removes RBCs from current edge
+        INPUT: e: igraph edge from which the RBCs should be removed
+               overshootsNo: number of RBCs which overshoot
+         OUTPUT: updated edge property 'rRBC'
+        """
+        #Remove RBCs from old Edge
+        if e['sign'] == 1.0:
+            e['rRBC']=e['rRBC'][:-overshootsNo]
+        else:
+            e['rRBC']=e['rRBC'][overshootsNo::]
 
     #--------------------------------------------------------------------------
     def _calculate_possible_number_of_BifEvents(self,oe):
@@ -2817,7 +2685,7 @@ class LinearSystemHtdTotFixedDTNewNew(object):
         #do not fit will be pushed outside anyways, while the position is assigned. However it might be useful for
         #the speed of the computations, because it reduces the number of RBCs over which is has to be looped
         #Check how many RBCs are allowed by nMax --> limitation results from np.floor(length/minDist) 
-	#and that RBCs are only 'half' in the vessel #TODO the nMax part should not be necessary.
+        #and that RBCs are only 'half' in the vessel #TODO the nMax part should not be necessary.
         #however the tube hematocrit formulation should be adjusted to account for the half RBCs at the
         #in- and outlet
         if posNoBifEvents + len(oe['rRBC']) > oe['nMax']:
@@ -2826,32 +2694,17 @@ class LinearSystemHtdTotFixedDTNewNew(object):
         return posNoBifEvents
 
     #--------------------------------------------------------------------------
-    def _compute_overshootTime(self,e,posBifRBCsIndex,sign):
-        """ Removes RBCs from current edge
-        INPUT: e: igraph edge to which RBCs should be propagated
-               posBifRBCsIndex: RBC indices of the possible bifurcations events
-               sign: sign of the edge
-         OUTPUT: overshootDist: distance which RBCs overshooted (0 --> max(overshootDist))
-                 overshootTime: time which the RBCs overshoot (0 --> max(overshootTime))
-        """
-        #TODO is overshootDist even needed as an output?
-        #overshootsDist --> array with the distances which the RBCs overshoot, 
-	    #starts wiht the RBC which overshoots the least 
-        overshootDist=e['rRBC'][posBifRBCsIndex]-e['length'] if sign == 1.0
-            else (0.-e['rRBC'][posBifRBCsIndex])[::-1]
-        #overshootTime --> time which every RBCs overshoots
-        overshootTime=overshootDist/e['v']
-
-        return overshootTime
-
-    #--------------------------------------------------------------------------
     def _check_overshootingNewVessel_and_overtakingRBCsInNewVessel(self,oe,position):
-        """ Removes RBCs from current edge TODO adjust description
-        INPUT: e: igraph edge to which RBCs should be propagated
-               posBifRBCsIndex: RBC indices of the possible bifurcations events
-               sign: sign of the edge
-         OUTPUT: overshootDist: distance which RBCs overshooted (0 --> max(overshootDist))
-                 overshootTime: time which the RBCs overshoot (0 --> max(overshootTime))
+        """ Adjust the np.array position. based on the following constraints. (1) RBC 
+        should not overshoot the whole vessel. (2) RBCs should not overtake/overlap with
+        RBCs which are already present. If (1) or (2) happens, RBCs are pushed backwards.
+        The position of following RBCs has to be readjusted.
+        INPUT: oe: edge to which the RBC shall be added
+               position: np array with the position RBCs would have in the new edge without
+               constraints. The values go from 0 --> x for sign=1 and sign = -1. The sign 
+               of the edges is considered, for the constraints for pushing the RBCs backwards
+         OUTPUT: position: updated array with RBC positions (values go from 0 --> x 
+                 for sign=1 and sign = -1)
         """
         if len(oe['rRBC']) > 0:
             if oe['sign'] == 1.0:
@@ -2871,7 +2724,6 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                 position[i-1]=position[i]-oe['minDist']
 
         return position
-
     #--------------------------------------------------------------------------
     def _push_stuckRBCs_back(self,e,noStuckRBCs):
         """ Push RBCs which can not be propagated back into their edge of origin.
@@ -2883,20 +2735,22 @@ class LinearSystemHtdTotFixedDTNewNew(object):
          OUTPUT: updated edge property 'rRBC'
         """
         #Deal with RBCs which could not be reassigned to the new edge because of a traffic jam
-        if noStuckRBCs > 0:
+        if noStuckRBCs > 0: 
+            sign = e['sign']
             #move stuck RBCs back into vessel
             for i in xrange(noStuckRBCs):
                 index=-1*(i+1) if sign == 1.0 else i
                 e['rRBC'][index]=e['length']-i*e['minDist'] if sign == 1.0 else 0+i*e['minDist']
+            noRBCs=len(e['rRBC']) 
             #Recheck if the distance between the newly introduces RBCs is still big enough 
-            if sign == 1.0:
-                for i in xrange(-1*noStuckRBCs,-1*(len(e['rRBC'])),-1):
+            if sign == 1.0: 
+                for i in xrange(-1*noStuckRBCs,-1*noRBCs,-1):
                     if e['rRBC'][i] < e['rRBC'][i-1] or abs(e['rRBC'][i]-e['rRBC'][i-1]) < e['minDist']:
                         e['rRBC'][i-1]=e['rRBC'][i]-e['minDist']
                     else:
                         break
             else:
-                for i in xrange(noStuckRBCs,len(e['rRBC'])-1):
+                for i in xrange(noStuckRBCs-1,noRBCs-1):
                     if e['rRBC'][i] > e['rRBC'][i+1] or abs(e['rRBC'][i]-e['rRBC'][i+1]) < e['minDist']:
                         e['rRBC'][i+1]=e['rRBC'][i]+e['minDist']
                     else:
@@ -2904,6 +2758,7 @@ class LinearSystemHtdTotFixedDTNewNew(object):
 
     #--------------------------------------------------------------------------
     def _compare_noBifEvents_to_posNoBifEvents(self,posNoBifEvents,noBifEvents,bifRBCsIndex,sign):
+        #TODO update description
         """ Push RBCs which can not be propagated back into their edge of origin.
         All RBCs which have been propagated in that edge are pushed backwards such
         that overlapping is avoided.
@@ -2911,7 +2766,8 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                noBifEvents: number of bifurcation events taking place
                bifRBCsIndex: list of RBC indices which are overshooting
                sign: sign of the edge in which the RBC are currently in
-         OUTPUT: updated edge property 'rRBC'
+         OUTPUT: overshootsNo:
+                 posBifRBCsIndex:
         """
         if posNoBifEvents > noBifEvents:
             posBifRBCsIndex = bifRBCsIndex
@@ -2927,18 +2783,19 @@ class LinearSystemHtdTotFixedDTNewNew(object):
         return overshootsNo,posBifRBCsIndex
 
     #----------------------------------------------------------------------------------------------------
-    def _nonCapDiv_compute_overshootNos_from_ratios(self,boolTrifurcation,overhsootsNo,ratio1,ratio2,ratio3):
+    def _nonCapDiv_compute_overshootNos_from_ratios(self,boolTrifurcation,overshootsNo,ratio1,ratio2,ratio3):
         """ Compute overshootsNo for the outlfow edge of non capillary divergent bifurcations 
         INPUT: boolTrifuration: bool if we are looking at a bifurcation with 3 outflows
                overshootsNo: number of RBCs overshooting in total
                ratio1: desired RBC ratio for the preferred outEdge
                ratio2: desired RBC ratio for the second preferred outEdge
                ratio3: desired RBC ratio for the third preferred outEdge
-        OUTPUT: overshootsNo1, overshootsNo2, overhsootsNo3:
+        OUTPUT: overshootsNo1, overshootsNo2, overshootsNo3:
                  overshootNos for the outflow edges (preferred outEdge is No1)
         """
+
+        #Optimization Functions
         if overshootsNo > 0:
-            #Optimization Functions
             def errorDistributeRBCs_ratio1(n1):
                 return n1/float(overshootsNo)-ratio1
             def errorDistributeRBCs_ratio2(n2):
@@ -2951,6 +2808,8 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                     resultMinimizeError = root(errorDistributeRBCs_ratio1,np.ceil(ratio1 * overshootsNo))
                     overshootsNo1=int(np.round(resultMinimizeError['x']))
                 else:
+                    #TODO this line might not be necessary because ratio1 should never be equal to 0 and 
+                    #overshootsNo != 0 is checked before --> rethink and doubleCheck
                     overshootsNo1 = 0
                 overshootsNo2 = overshootsNo - overshootsNo1
                 overshootsNo3 = 0
@@ -2961,10 +2820,12 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                     overshootsNo1=int(np.round(resultMinimizeError['x'][0]))
                     overshootsNo2=int(np.round(resultMinimizeError['x'][1]))
                 elif ratio1 != 0 and overshootsNo != 0:
+                    #TODO is ratio2 ever = 0?
                     resultMinimizeError = root(errorDistributeRBCs_ratio1,np.ceil(ratio1 * overshootsNo))
                     overshootsNo1=int(np.round(resultMinimizeError['x']))
                     overshootsNo2=0
                 elif ratio2 != 0 and overshootsNo != 0:
+                    #TODO is ratio1 ever = 0?
                     resultMinimizeError = root(errorDistributeRBCs_ratio2,np.ceil(ratio2 * overshootsNo))
                     overshootsNo2=int(np.round(resultMinimizeError['x']))
                     overshootsNo1=0
@@ -2977,14 +2838,14 @@ class LinearSystemHtdTotFixedDTNewNew(object):
         return overshootsNo1, overshootsNo2, overshootsNo3
 
     #----------------------------------------------------------------------------------------------------
-    def _nonCapDiv_compare_overshootNos_to_posBifEvents(self,overhsootsNo1,overshootsNo2,overshootsNo3, \
-        posNoBifEventsPref,posNoBifEventsPref2,posNoBifEventsPref3):
+    def _nonCapDiv_compare_overshootNos_to_posBifEvents(self,overshootsNo1,overshootsNo2,overshootsNo3, \
+        posNoBifEventsPref,posNoBifEventsPref2,posNoBifEventsPref3,overshootsNo):
         """ Compare computed overshootNos to possible number of bifurcation events
         INPUT: overshootsNo1, overshootsNo2, overshootsNo3:
                  overshootNos for the outflow edges which are desired (preferred outEdge is No1)
                posNoBifEventsPref, posNoBifEventsPref2,posNoBifEventsPref3:
                  possible number of bifurcation Events for the available out edges
-        OUTPUT: overshootsNo1, overshootsNo2, overhsootsNo3:
+        OUTPUT: overshootsNo1, overshootsNo2, overshootsNo3:
                  overshootNos for the outflow edges which are infact possible (preferred outEdge is No1)
         """
         if overshootsNo1 > posNoBifEventsPref:
@@ -3000,7 +2861,7 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                     overshootsNo3 = overshootsNo - (posNoBifEventsPref + posNoBifEventsPref2)
                 else:
                     overshootsNo3 = posNoBifEventsPref3
-                overshootsNo2 = posNoBifEventsPref2
+            overshootsNo2 = posNoBifEventsPref2
         if overshootsNo3 > posNoBifEventsPref3:
             #possible bifurcation event > currentNewRBCs + additional RBCs from edge 2
             if posNoBifEventsPref > overshootsNo1 +  (overshootsNo3 - posNoBifEventsPref3):
@@ -3017,13 +2878,11 @@ class LinearSystemHtdTotFixedDTNewNew(object):
 
     #----------------------------------------------------------------------------------------------------
     def _compute_unconstrained_RBC_positions(self,oe,overshootTime,signConsidered=0):
-        """ Compare computed overshootNos to possible number of bifurcation events
-        INPUT: overshootsNo1, overshootsNo2, overshootsNo3:
-                 overshootNos for the outflow edges which are desired (preferred outEdge is No1)
-               posNoBifEventsPref, posNoBifEventsPref2,posNoBifEventsPref3:
-                 possible number of bifurcation Events for the available out edges
-        OUTPUT: overshootsNo1, overshootsNo2, overhsootsNo3:
-                 overshootNos for the outflow edges which are infact possible (preferred outEdge is No1)
+        """ Compute the unconstrained position of RBCs in possible outEdge. 
+        INPUT: oe: possible outEdge
+               overshootTime: array of time values by how many ms the different RBCs overshooted
+               signConsidered: bool, 0: same postion for 1 and -1 edges; 1: different computation for sign=-1
+        OUTPUT: position: unconstrained position of RBCs in possible outEdge
         """
         if not signConsidered:
             position=overshootTime*oe['v']
@@ -3034,16 +2893,15 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                 position=oe['length']-overshootTime[::-1]*oe['v']
 
         return position
-
     #----------------------------------------------------------------------------------------------------
     def _nonCapDiv_add_RBCs_to_positionPref(self,oe,position,positionPref,index):
         """ Add one RBC to the positionPref for non capillary divergent bifurcations (vessel overshooting and 
         overlapping old RBCs and overlapping of propagated RBCs is considered)
         INPUT: oe: outEdge in which the RBCs should be placed
                position: unconstrained postion of RBCs in the new outEdge
-               positionPref: unconstrained position of RBCs in the new outEdge
+               positionPref: position of RBCs in outEdge
                index: idnex of the RBC which is currently under investigation
-        OUTPUT: positionPref: updated list of positionPref
+        OUTPUT: positionPref: position of RBCs in outEdge + 1 RBC
         """
         eps=self._eps
         if positionPref != []:
@@ -3080,15 +2938,15 @@ class LinearSystemHtdTotFixedDTNewNew(object):
 
         return positionPref
 
-    #----------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _nonCapDiv_push_RBCs_forward_to_fit(self,oe,positionPref):
-        #TODO description
-        """ Add one RBC to the positionPref for non capillary divergent bifurcations (vessel overshooting and 
-        overlapping old RBCs and overlapping of propagated RBCs is considered)
+        """ Adjust positionPref for nonCapillary divergent bifurcations. Overshooting and
+        overlapping has already been considered. However, RBCs might have been pushed outside of vessel.
+        Those RBCs are now pushed forward, such that the possible number of bifurcation events for
+        that edge is achieved.
         INPUT: oe: outEdge in which the RBCs should be placed
-               position: unconstrained postion of RBCs in the new outEdge
-               positionPref: unconstrained position of RBCs in the new outEdge
-               index: idnex of the RBC which is currently under investigation
+               positionPref: position of RBCs in new outEdge. Constrained by overshooting and
+                overlapping 
         OUTPUT: positionPref: updated list of positionPref
         """
         eps=self._eps
@@ -3111,86 +2969,47 @@ class LinearSystemHtdTotFixedDTNewNew(object):
                             break
 
         return positionPref
+
     #----------------------------------------------------------------------------------------------------
     def _CapDiv_compute_timeBlocked(self,dists,oes,positionPrefs):
-        #TODO description
-        """ Add one RBC to the positionPref for non capillary divergent bifurcations (vessel overshooting and 
-        overlapping old RBCs and overlapping of propagated RBCs is considered)
-        INPUT: oe: outEdge in which the RBCs should be placed
-               position: unconstrained postion of RBCs in the new outEdge
-               positionPref: unconstrained position of RBCs in the new outEdge
-               index: idnex of the RBC which is currently under investigation
-        OUTPUT: positionPref: updated list of positionPref
+        """  
+        If the RBC has to wait at all possible outlfow Edges, the time the RBC
+        is blocked iscomputed. The RBC will be added to the outEdge where
+        it is blocked the least amount of time. 
+        If less than 3 outedges are available. The list values for the outflow 
+        edge which is is not available have to be set to None, 
+        e.g only edge 1 & 3 --> dists = [dist1,None,dist3]
+        INPUT: dists: [dist1,dist2,dist3] distance between the last RBC assigned 
+                    to the outEdge and the one under investigation
+               oes: [oe,oe2,oe3] list of outEdges in which the RBC can proceed
+               positionPrefs: [positionPref1,positionPref2,positionPref3] list
+                    of RBC positions, which have already been propagated at the
+                    current bifurcation.
+        OUTPUT: newOutEdge: index of the new outEdge (1,2 or 3), -1 if all full
         """
-        
-        timesBlocked=[None]*3
-        prefsFull=[0]*3
+        assert len(dists) == len(oes) == len(positionPrefs)
 
-        for j,positionPref,oe,dist in enumerate(positionPrefs,oes,dists): #TODO double check enumerate of two
-            if positionPref != None
-                space =  positionPref[-1] if oe['sign'] == 1.0 \
-                    else oe['length']-positionPref[-1]
-                if np.floor(space1/oe['minDist']) >= 1:
-                    timesBlocked[j]=(oe['minDist']-dist)/oe['v']
-                else:
-                    timesBlocked[j]=None
-                    prefsFull[j]=1
-            
+        eps = self._eps
+        num=len(dists)
+        timesBlocked=np.array([np.NaN]*num)
 
-        space1 =  positionPref1[-1] if oe['sign'] == 1.0 \
-            else oe['length']-positionPref1[-1]
-        if np.floor(space1/oe['minDist']) >= 1:
-            timeBlocked1=(oe['minDist']-dist1)/oe['v']
-        else:
-            timeBlocked1=None
-            pref1Full=1
-        space2 =  positionPref2[-1] if oe2['sign'] == 1.0 \
-            else oe2['length']-positionPref2[-1]
-        if np.floor(space2/oe2['minDist']) >= 1:
-            timeBlocked2=(oe2['minDist']-dist2)/oe2['v']
-        else:
-            timeBlocked2=None
-            pref2Full=1
-        space3 =  positionPref3[-1] if oe3['sign'] == 1.0 \
-            else oe3['length']-positionPref3[-1]
-        if np.floor(space3/oe3['minDist']) >= 1:
-            timeBlocked3=(oe3['minDist']-dist3)/oe3['v']
-        else:
-            timeBlocked3=None
-            pref3Full=1
-        if pref1Full == 1 and pref2Full == 1 and pref3Full == 1:
-            break
-        #Define newOutEdge
-        newOutEdge=0
-        if timeBlocked1 == None: #2 or 3
-            if timeBlocked2 == None:
-                newOutEdge=3
-            elif timeBlocked3 == None:
-                newOutEdge=2
-            elif timeBlocked2 <= timeBlocked3:
-                newOutEdge=2
-            elif timeBlocked3 <= timeBlocked2:
-                newOutEdge=3
-        elif timeBlocked2 == None: #1 or 3
-            if timeBlocked3 == None:
-                newOutEdge=1
-            elif timeBlocked1 <= timeBlocked3:
-                newOutEdge=1
-            elif timeBlocked3 <= timeBlocked1:
-                newOutEdge=3
-        elif timeBlocked3 == None: #1 or 2
-            if timeBlocked2 <= timeBlocked1:
-                newOutEdge=2
-            elif timeBlocked1 <= timeBlocked2:
-                newOutEdge=1
-        else:
-            if np.min([timeBlocked1,timeBlocked2,timeBlocked3]) == timeBlocked1:
-                newOutEdge=1
-            elif np.min([timeBlocked1,timeBlocked2,timeBlocked3]) == timeBlocked2:
-                newOutEdge=2
-            elif np.min([timeBlocked1,timeBlocked2,timeBlocked3]) == timeBlocked3:
-                newOutEdge=3
-#--------------------------------------------------------------------------
+        # update the timesBlocked
+        for j in range(num):
+            if positionPrefs[j] == None:
+                continue
+
+                space=positionPrefs[j][-1]
+                if oes[j]['sign'] != 1.0:
+                    space=oes[j]['length']-space
+                if space - oes[j]['minDist'] >= eps:
+                    timesBlocked[j]=(oes[j]['minDist']-dists[j])/oes[j]['v']
+
+        try:
+            return np.nanargmin(timesBlocked) + 1
+        except ValueError:
+            return -1
+
+    #--------------------------------------------------------------------------
     #@profile
     def evolve(self, time, method, dtfix,**kwargs):
         """Solves the linear system A x = b using a direct or AMG solver.
@@ -3229,7 +3048,7 @@ class LinearSystemHtdTotFixedDTNewNew(object):
         filenamelist = self._filenamelist
         self._dt=dtfix
         timelist = self._timelist
-	timelistAvg = self._timelistAvg
+        timelistAvg = self._timelistAvg
         init=self._init
 
         SampleDetailed=False

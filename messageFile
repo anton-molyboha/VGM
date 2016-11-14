@@ -1,3 +1,20 @@
-- .pyc deleted from git
+linearSystem_htd_TotFixedDT_NEW.py
 
-- tests set up (not finished)
+renamed:
+_nonCapDiv_add_RBCs_to_positionPref --> divergent_add_RBCs_to_positionPref:
+because it is also used for capillaries
+
+modified:
+_CapDiv_compute_timeBlocked: list of prefXFull given as output,
+because it is needed as input for outer if-conditions 
+
+_CapDiv_add_blocked_RBC_to_positionPref: modified to be applicable where
+there is only one possible outEdge left and the RBC is pushed backwards. 
+Addtional output: boolFull
+
+others:
+- small modifications to reduce number of lines
+- if boolTrifurcation and posNoBifEventsPrefX > countPrefX and prefXFull == 0:
+	are combined now a combinded if-condition (instead of two individual ones)
+-
+
