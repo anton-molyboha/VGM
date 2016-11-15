@@ -976,6 +976,7 @@ class LinearSystemHtdTotFixedDT_NEW(object):
         sortedE.sort()
         sortedE=[i[1] for i in sortedE]
         convEdges=[0]*G.ecount()
+        httBCDoneEdges=[0]*G.ecount()
         edgeUpdate=[]   #Edges where the number of RBCs changed --> need to be updated
         vertexUpdate=[] #Vertices where the number of RBCs changed in adjacent edges --> need to be updated
         #SECOND step go through all edges from smallest to highest pressure and move RBCs
@@ -984,7 +985,7 @@ class LinearSystemHtdTotFixedDT_NEW(object):
             edgesInvolved=[] #all edges connected to the bifurcation vertex
             e = G.es[ei]
             sign=e['sign']
-            vi = e['target'] if sign == 1 else vi=e['source']
+            vi = e['target'] if sign == 1 else e['source']
             vertex=G.vs[vi]
             edgesInvolved=G.incident(vi)
             nRBCSumBefore = np.sum(G.es[edgesInvolved]['nRBC'])
@@ -1107,7 +1108,7 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                                                 boolRBCassigned=1
                                                 break
                                     if not boolRBCassigned:
-                                                print('BIGERROR all overshootRBCS should fit')
+                                        print('BIGERROR all overshootRBCS should fit 1')
                                 positionPref1=self._nonCapDiv_push_RBCs_forward_to_fit(oe,positionPref1)
                                 positionPref2=self._nonCapDiv_push_RBCs_forward_to_fit(oe2,positionPref2)
                                 if boolTrifurcation:
@@ -1287,7 +1288,8 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                         noBifEvents1=noBifEvents
                         outE=vertex['outflowE'][0]
                         oe = G.es[outE]
-                        inflowEdges=vertex['inflowE'].remove(ei)
+                        inflowEdges=vertex['inflowE'][:]
+                        inflowEdges.remove(ei)
                         inE2=inflowEdges[0]
                         e2=G.es[inE2]
                         sign2=e2['sign']
@@ -1335,7 +1337,7 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                                 dummy3=np.array([],dtype=np.int)
                             overshootTimes=zip(np.concatenate([overshootTime1,overshootTime2,overshootTime3]),np.concatenate([dummy1,dummy2,dummy3]))
                             overshootTimes.sort()
-                            overshootsNo=np.max([len(overshootTimes),posNoBifEvents])
+                            overshootsNo=np.min([len(overshootTimes),posNoBifEvents])
                             overshootTime,inEdge=zip(*overshootTimes)
                             overshootTime=np.array(overshootTime)
                             count1=inEdge.count(1)
@@ -1344,21 +1346,16 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                             #position starts with least overshooting RBC and ends with highest overshooting RBC
                             position=self._compute_unconstrained_RBC_positions(oe,overshootTime,signConsidered=0)
                             position=self._check_overshootingNewVessel_and_overtakingRBCsInNewVessel(oe,position)
-                            #TODO this loop should still be improved. faster way?
-                            for i in xrange(overshootsNo):
-                                if position[i] < 0:
-                                    if inEdge[i] == 1:
-                                        count1 += -1
-                                    elif inEdge[i] == 2:
-                                        count2 += -1
-                                    elif inEdge[i] == 3:
-                                        count3 += -1
-                                else:
-                                    break
-                            if len(position) != len(position[i::]):
-                                position=position[i::]
-                                inEdge=inEdge[i::]
-                            #Add rbcs to outE
+                            try:
+                                indexOut=(position < 0).tolist().index(False)
+                            except:
+                                indexOut = len(position)
+                            inEdgesOut=inEdge[0:indexOut]
+                            count1 += -1*inEdgesOut.count(1)
+                            count2 += -1*inEdgesOut.count(2)
+                            count3 += -1*inEdgesOut.count(3)
+                            position=position[indexOut::]
+                            inEdge=inEdge[indexOut::]
                             oe['countRBCs']+=len(position)
                             self._move_RBCs(oe,position,signConsidered=0)
                             if count1 > 0:
@@ -1370,16 +1367,11 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                                     self._remove_RBCs(e3,count3)
                             overshootsNo = count1 + count2 + count3
                         else:
-                            count1=0
-                            count2=0
-                            count3=0
-                        #Deal with RBCs which could not be reassigned to the new edge because of a traffic jam
+                            count1,count2,count3=0,0,0
                         noStuckRBCs1=len(bifRBCsIndex1)-count1
                         self._push_stuckRBCs_back(e,noStuckRBCs1)
-                        #InEdge 2
                         noStuckRBCs2=len(bifRBCsIndex2)-count2
                         self._push_stuckRBCs_back(e2,noStuckRBCs2)
-                        #InEdge 3
                         if boolTrifurcation:
                             noStuckRBCs3=len(bifRBCsIndex3)-count3
                             self._push_stuckRBCs_back(e3,noStuckRBCs3)
@@ -1389,12 +1381,9 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                         #print('DOUBLE')
                         bifRBCsIndex1=bifRBCsIndex
                         noBifEvents1=noBifEvents
-                        inflowEdges=vertex['inflowE']
-                        for i in inflowEdges:
-                            if i == e.index:
-                                inE1=e.index
-                            else:
-                                inE2=i
+                        inflowEdges=vertex['inflowE'][:]
+                        inflowEdges.remove(ei)
+                        inE2=inflowEdges[0]
                         e2=G.es[inE2]
                         sign2=e2['sign']
                         if convEdges[inE2] == 0:
@@ -1404,9 +1393,7 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                         else:
                             bifRBCsIndex2=[]
                             noBifEvents2=0
-                        #Define outEdges
                         outEdges=vertex['outflowE']
-                        #Differ between capillaries and non-capillaries
                         if vertex['isCap']:
                             nonCap = 0
                             preferenceList = [x[1] for x in sorted(zip(np.array(G.es[outEdges]['flow'])/np.array(G.es[outEdges]['crosssection']), outEdges), reverse=True)]
@@ -1420,17 +1407,12 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                                 ratio1 = 1.0 - ratio1
                                 preferenceList=preferenceList[::-1]
                             ratio2 = 1.0 -  ratio1
-                        #Define prefered OutEdges
-                        outEPref=preferenceList[0]
-                        outEPref2=preferenceList[1]
-                        oe=G.es[outEPref]
-                        oe2=G.es[outEPref2]
+                        oe=G.es[preferenceList[0]]
+                        oe2=G.es[preferenceList[1]]
                         posNoBifEventsPref=self._calculate_possible_number_of_BifEvents(oe)
                         posNoBifEventsPref2=self._calculate_possible_number_of_BifEvents(oe2)
-                        #Check how many RBCs fit into the new Vessel
                         posNoBifEvents=int(posNoBifEventsPref+posNoBifEventsPref2)
-                        noBifEvents = noBifEvents1 + noBifEvents2
-                        overshootsNo=noBifEvents
+                        overshootsNo = noBifEvents1 + noBifEvents2
                         if nonCap:
                             overshootsNo1,overshootsNo2,overshootsNo3 = \
                                 self._nonCapDiv_compute_overshootNos_from_ratios(0,overshootsNo,ratio1,ratio2,0.)
@@ -1438,40 +1420,30 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                                 overshootsNo1,overshootsNo2,0,posNoBifEventsPref,posNoBifEventsPref2,0,overshootsNo)
                             overshootsNo = int(overshootsNo1 + overshootsNo2)
                             posNoBifEvents = overshootsNo
-                        #Calculate number of bifEvents
                         #If bifurcations are possible check how many overshoots there are at the inEdges
                         if posNoBifEvents > 0:
                             overshootTime1=self._compute_overshootTime(e,bifRBCsIndex1,sign)
-                            #TODO here also numpy arrays could be used, same as for convergent bifurcations
-                            dummy1=[1]*len(overshootTime1)
+                            dummy1=np.ones(noBifEvents1,dtype=np.int)
                             if noBifEvents2 > 0:
                                 overshootTime2=self._compute_overshootTime(e2,bifRBCsIndex2,sign2)
-                                dummy2=[2]*len(overshootTime2)
+                                dummy2=2*np.ones(noBifEvents2,dtype=np.int)
                             else:
                                 overshootDist2=[]
                                 overshootTime2=[]
                                 dummy2=[]
-                            overshootTimes=zip(np.concatenate([overshootTime1,overshootTime2]),dummy1+dummy2)
+                            overshootTimes=zip(np.concatenate([overshootTime1,overshootTime2]),np.concatenate([dummy1,dummy2]))
                             overshootTimes.sort()
-                            overshootTime=[]
-                            inEdge=[]
-                            #Count RBCs moving from inEdge1 and inEdge2
-                            if posNoBifEvents > len(overshootTimes):
-                                overshootsNo=len(overshootTimes)
-                            else:
-                                overshootsNo=int(posNoBifEvents)
-                            for i in xrange(-1*overshootsNo,0):
-                                overshootTime.append(overshootTimes[i][0])
-                                inEdge.append(overshootTimes[i][1])
+                            overshootsNo=np.min([len(overshootTimes),posNoBifEvents])
+                            overshootTime,inEdge=zip(*overshootTimes)
                             overshootTime=np.array(overshootTime)
+                            count1=inEdge.count(1)
+                            count2=inEdge.count(2)
                             position1=self._compute_unconstrained_RBC_positions(oe,overshootTime,signConsidered=1)
                             position2=self._compute_unconstrained_RBC_positions(oe2,overshootTime,signConsidered=1)
                             if nonCap:
                                 countNo1,countNo2=0,0
                                 count1,count2=0,0
                                 positionPref1,positionPref2=[],[]
-                                inEPref1,inEPref2=[],[]
-                                indexPref1,indexPref2=[],[]
                                 distributeOrderNextIteration=[1,2]
                                 for i in xrange(overshootsNo):
                                     index=-1*(i+1)
@@ -1483,70 +1455,41 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                                                 positionPref1=self._divergent_add_RBCs_to_positionPref(oe,position1,positionPref1,i)
                                                 distributeOrderNextIteration=[2,1]
                                                 boolRBCassigned=1
-                                                inEPref1.append(inEdge[index])
-                                                indexPref1.append(i)
                                                 countNo1 += 1
-                                                if inEdge[index] == 1:
-                                                    count1 += 1
-                                                else:
-                                                    count2 += 1
+                                                count1,count2=self._doubleConnecting_update_inEdge_count(inEdge,index,count1,count2)
                                                 break
                                         elif j == 2:
                                             if countNo2 < overshootsNo2:
                                                 positionPref2=self._divergent_add_RBCs_to_positionPref(oe2,position2,positionPref2,i)
                                                 distributeOrderNextIteration=[1,2]
                                                 boolRBCassigned=1
-                                                inEPref2.append(inEdge[index])
-                                                indexPref2.append(i)
                                                 countNo2 += 1
-                                                if inEdge[index] == 1:
-                                                    count1 += 1
-                                                else:
-                                                    count2 += 1
+                                                count1,count2=self._doubleConnecting_update_inEdge_count(inEdge,index,count1,count2)
                                                 break
                                     if not boolRBCassigned:
-                                                print('BIGERROR all overshootRBCS should fit')
+                                        print('BIGERROR all overshootRBCS should fit 2')
                                 positionPref1=self._nonCapDiv_push_RBCs_forward_to_fit(oe,positionPref1)
                                 positionPref2=self._nonCapDiv_push_RBCs_forward_to_fit(oe2,positionPref2)
                             else:
-                                #To begin with it is tried if all RBCs fit into the prefered outEdge. The time of arrival at the RBCs is taken into account
+                                #It is tried if all RBCs fit into the prefered outEdge. The time of arrival at the RBCs is taken into account
                                 #RBCs which would be too close together are put into the other edge
-                                #position2/position3 is used if there is not enough space in the prefered outEdge and hence the RBC is moved to the other outEdge
-                                #actual position of RBCs in the edges
-                                positionPref2=[]
-                                positionPref1=[]
-                                inEPref1=[]
-                                inEPref2=[]
-                                indexPref1=[]
-                                indexPref2=[]
-                                #number of RBCs in the Edges
-                                countPref1=0
-                                countPref2=0
-                                pref1Full = 0
-                                pref2Full = 0
-                                count1 = 0
-                                count2 = 0
-                                #Loop over all movable RBCs
+                                positionPref1,positionPref2=[],[]
+                                countPref1,countPref2=0,0 
+                                pref1Full,pref2Full = 0,0
+                                count1,count2 = 0,0
                                 for i in xrange(overshootsNo):
                                     index=-1*(i+1)
                                     index1=-1*(i+1) if oe['sign'] == 1.0 else i
                                     index2=-1*(i+1) if oe2['sign'] == 1.0 else i
-                                    #check if RBC still fits into Prefered OutE
                                     if posNoBifEventsPref > countPref1 and pref1Full == 0:
-                                        #Check if there are RBCs present in outEPref
                                         if positionPref1 != []:
-                                            #Check if distance to preceding RBC is big enough
                                             dist1=positionPref1[-1]-position1[index1] if oe['sign'] == 1.0 \
                                                 else position1[index1]-positionPref1[-1]
-                                            #The distance is not big enough check if RBC fits into outEPref2
                                             if dist1 < oe['minDist']:
-                                                #if RBCs are present in the outEdgePref2
                                                 if posNoBifEventsPref2 > countPref2 and pref2Full == 0:
                                                     if positionPref2 != []:
                                                         dist2=positionPref2[-1]-position2[index2] if oe2['sign'] == 1.0 \
                                                             else position2[index2]-positionPref2[-1]
-                                                        #Check if there is enough space in 2nd outEdge
-                                                        #in case there is not enough space, check where the RBC is blocked the least amount of time
                                                         if dist2 < oe2['minDist']:
                                                             newOutEdge,[pref1Full,pref2Full,pref3FullDummy]=self._CapDiv_compute_timeBlocked(\
                                                                 [dist1,dist2,None],[oe,oe2,None],[positionPref1,positionPref2,None],[pref1Full,pref2Full,None])
@@ -1554,411 +1497,125 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                                                                 break
                                                             if newOutEdge == 1:
                                                                 positionPref1,boolFull =self._CapDiv_add_blocked_RBC_to_positionPref(oe,positionPref1,case=1)
-                                                                inEPref1.append(inEdge[index])
-                                                                indexPref1.append(i)
                                                                 countPref1 += 1
-                                                                if inEdge[index] == 1:
-                                                                    count1 += 1
-                                                                elif inEdge[index] == 2:
-                                                                    count2 += 1
+                                                                count1,count2=self._doubleConnecting_update_inEdge_count(inEdge,index,count1,count2)
                                                             elif newOutEdge == 2:
                                                                 positionPref2,boolFull =self._CapDiv_add_blocked_RBC_to_positionPref(oe2,positionPref2,case=1)
-                                                                inEPref2.append(inEdge[index])
-                                                                indexPref2.append(i)
                                                                 countPref2 += 1
-                                                                if inEdge[index] == 1:
-                                                                    count1 += 1
-                                                                elif inEdge[index] == 2:
-                                                                    count2 += 1
-                                                        #there is enough space for the RBC in outEPref2
+                                                                count1,count2=self._doubleConnecting_update_inEdge_count(inEdge,index,count1,count2)
                                                         else:
                                                             positionPref2.append(position2[index2])
-                                                            inEPref2.append(inEdge[index])
-                                                            indexPref2.append(i)
                                                             countPref2 += 1
-                                                            if inEdge[index] == 1:
-                                                                count1 += 1
-                                                            elif inEdge[index] == 2:
-                                                                count2 += 1
-                                                    #there are no RBCs in outEdge2
+                                                            count1,count2=self._doubleConnecting_update_inEdge_count(inEdge,index,count1,count2)
                                                     else:
                                                         positionPref2=self._divergent_add_RBCs_to_positionPref(oe2,position2,positionPref2,i)
-                                                        inEPref2.append(inEdge[index])
-                                                        indexPref2.append(i)
                                                         countPref2 += 1
-                                                        if inEdge[index] == 1:
-                                                            count1 += 1
-                                                        elif inEdge[index] == 2:
-                                                            count2 += 1
-                                                #There is no space in outEPref2 --> RBC is pushed backwards in outEPref1
+                                                        count1,count2=self._doubleConnecting_update_inEdge_count(inEdge,index,count1,count2)
                                                 else:
-                                                    if oe['sign'] == 1.0:
-                                                        position1[index1]=positionPref1[-1]-oe['minDist']
-                                                        if position1[index1] > 0:
-                                                            positionPref1.append(position1[index1])
-                                                            inEPref1.append(inEdge[index])
-                                                            indexPref1.append(i)
-                                                            countPref1 += 1
-                                                            if inEdge[index] == 1:
-                                                                count1 += 1
-                                                            elif inEdge[index] == 2:
-                                                                count2 += 1
-                                                        else:
-                                                            pref1Full = 1
-                                                            break
+                                                    positionPref1,boolFull=self._CapDiv_add_blocked_RBC_to_positionPref(oe,positionPref1,case=2)
+                                                    if boolFull == 1:
+                                                        pref1Full = 1
+                                                        break
                                                     else:
-                                                        position1[index1]=positionPref1[-1]+oe['minDist']
-                                                        if position1[index1] < oe['length']:
-                                                            positionPref1.append(position1[index1])
-                                                            inEPref1.append(inEdge[index])
-                                                            indexPref1.append(i)
-                                                            countPref1 += 1
-                                                            if inEdge[index] == 1:
-                                                                count1 += 1
-                                                            elif inEdge[index] == 2:
-                                                                count2 += 1
-                                                        else:
-                                                            pref1Full = 1
-                                                            break
-                                            #If the RBC fits into outEPref1
+                                                        countPref1 += 1
+                                                        count1,count2=self._doubleConnecting_update_inEdge_count(inEdge,index,count1,count2)
                                             else:
                                                 positionPref1.append(position1[index1])
-                                                inEPref1.append(inEdge[index])
-                                                indexPref1.append(i)
                                                 countPref1 += 1
-                                                if inEdge[index] == 1:
-                                                    count1 += 1
-                                                elif inEdge[index] == 2:
-                                                    count2 += 1
-                                        #There are not yet any new RBCs in outEdgePref
+                                                count1,count2=self._doubleConnecting_update_inEdge_count(inEdge,index,count1,count2)
                                         else:
                                             positionPref1=self._divergent_add_RBCs_to_positionPref(oe,position1,positionPref1,i)
-                                            inEPref1.append(inEdge[index])
-                                            indexPref1.append(i)
                                             countPref1 += 1
-                                            if inEdge[index] == 1:
-                                                count1 += 1
-                                            elif inEdge[index] == 2:
-                                                count2 += 1
-                                    #The RBCs do not fit into the prefered outEdge anymore
-                                    #Therefore they are either put in outEdge2 or outEdge3
+                                            count1,count2=self._doubleConnecting_update_inEdge_count(inEdge,index,count1,count2)
                                     elif posNoBifEventsPref2 > countPref2 and pref2Full == 0:
-                                        #Check if there are already new RBCs in outEPref2
                                         if positionPref2 != []:
                                             dist2=positionPref2[-1]-position2[index2] if oe2['sign'] == 1.0 \
                                                 else position2[index2]-positionPref2[-1]
                                             if dist2 < oe2['minDist']:
-                                                #RBCs are pushed backewards in Pref2
-                                                if oe2['sign'] == 1.0:
-                                                    position2[index2]=positionPref2[-1]-oe2['minDist']
-                                                    if position2[index2] > 0:
-                                                        positionPref2.append(position2[index2])
-                                                        inEPref2.append(inEdge[index])
-                                                        indexPref2.append(i)
-                                                        countPref2 += 1
-                                                        if inEdge[index] == 1:
-                                                            count1 += 1
-                                                        elif inEdge[index] == 2:
-                                                            count2 += 1
-                                                    else:
-                                                        pref2Full = 1
-                                                        break
+                                                positionPref2,boolFull=self._CapDiv_add_blocked_RBC_to_positionPref(oe2,positionPref2,case=2)
+                                                if boolFull == 1:
+                                                    pref2Full = 1
+                                                    break
                                                 else:
-                                                    position2[index2]=positionPref2[-1]+oe2['minDist']
-                                                    if position2[index2] < oe2['length']:
-                                                        positionPref2.append(position2[index2])
-                                                        inEPref2.append(inEdge[index])
-                                                        indexPref2.append(i)
-                                                        countPref2 += 1
-                                                        if inEdge[index] == 1:
-                                                            count1 += 1
-                                                        elif inEdge[index] == 2:
-                                                            count2 += 1
-                                                    else:
-                                                        pref2Full = 1
-                                                        break
-                                            #There is enough space for the RBCs in the outEdge 2
+                                                    countPref2 += 1
+                                                    count1,count2=self._doubleConnecting_update_inEdge_count(inEdge,index,count1,count2)
                                             else:
                                                 positionPref2.append(position2[index2])
-                                                inEPref2.append(inEdge[index])
-                                                indexPref2.append(i)
                                                 countPref2 += 1
-                                                if inEdge[index] == 1:
-                                                    count1 += 1
-                                                elif inEdge[index] == 2:
-                                                    count2 += 1
-                                        #There are not yet any RBCs in outEdge 2
+                                                count1,count2=self._doubleConnecting_update_inEdge_count(inEdge,index,count1,count2)
                                         else:
                                             positionPref2=self._divergent_add_RBCs_to_positionPref(oe2,position2,positionPref2,i)
-                                            inEPref2.append(inEdge[index])
-                                            indexPref2.append(i)
                                             countPref2 += 1
-                                            if inEdge[index] == 1:
-                                                count1 += 1
-                                            elif inEdge[index] == 2:
-                                                count2 += 1
-                                    #There is no more space for further RBCs
+                                            count1,count2=self._doubleConnecting_update_inEdge_count(inEdge,index,count1,count2)
                                     else:
                                         break
-                                if countPref2+countPref1 != overshootsNo:
-                                    overshootsNo = countPref2+countPref1
-                            #Add rbcs to outEPref
+                                overshootsNo = countPref2+countPref1
                             oe['countRBCs']+=len(positionPref1)
                             self._move_RBCs(oe,positionPref1[::-1],signConsidered=1)
-                            #Add rbcs to outEPref2       
                             oe2['countRBCs']+=len(positionPref2)
                             self._move_RBCs(oe2,positionPref2[::-1],signConsidered=1)
-                            #Remove RBCs from old Edge 1
                             if count1 > 0:
                                 self._remove_RBCs(e,count1)
                             if noBifEvents2 > 0 and count2 > 0:
                                 self._remove_RBCs(e2,count2)
-                        #OutEdges are currently blocked, no bifurcation events possible
                         else:
-                            countPref1=0
-                            countPref2=0
-                            count1=0
-                            count2=0
-                        #Deal with RBCs which could not be reassigned to the new edge because of a traffic jam
-                        #InEdge 1
+                            countPref1,countPref2=0,0
+                            count1,count2=0,0
                         noStuckRBCs1=len(bifRBCsIndex1)-count1
                         self._push_stuckRBCs_back(e,noStuckRBCs1)
-                        #InEdge 2
                         if noBifEvents2 > 0:
                             noStuckRBCs2=len(bifRBCsIndex2)-count2
                             self._push_stuckRBCs_back(e2,noStuckRBCs2)
             #-------------------------------------------------------------------------------------------
-            rRBC = []
-            rRBC2 = []
-            rRBC3 = []
             if e['httBC'] is not None:
-                boolHttEdge = 1
-                rRBC = []
-                lrbc = e['minDist']
-                htt = e['httBC']
-                length = e['length']
-                nMaxNew=e['nMax']-len(e['rRBC'])
-                if len(e['rRBC']) > 0:
-                    posFirst=e['rRBC'][0] if e['sign']==1.0 else e['length']-e['rRBC'][-1]
-                    e['posFirst_last']=posFirst
-                    e['v_last'] = e['v']
-                    cum_length = posFirst
-                else:
-                    cum_length = e['posFirst_last'] + e['v_last'] * dt
-                    posFirst = cum_length
-                    e['posFirst_last']=posFirst
-                    if e['v'] > e['v_last']:
-                        e['v_last']=e['v']
-                while cum_length >= lrbc and nMaxNew > 0:
-                    if len(e['keep_rbcs']) != 0:
-                        if posFirst - e['keep_rbcs'][0] >= 0:
-                            if posFirst - e['keep_rbcs'][0] > e['length']:
-                                rRBC.append(e['length'])
-                                posFirst=e['length']
-                            else:
-                                rRBC.append(posFirst - e['keep_rbcs'][0])
-                                posFirst=posFirst - e['keep_rbcs'][0]
-                            nMaxNew += -1
-                            cum_length = posFirst
-                            e['keep_rbcs']=[]
-                            e['posFirst_last']=posFirst
+                if httBCDoneEdges[ei] == 0:
+                    httBCDoneEdges[ei] = 1
+                    boolHttEdge = 1
+                    rRBC = self._insert_RBCs_at_boundaryEdges(e)
+                    if len(rRBC) >= 1.:
+                        if e['sign'] == 1:
+                            e['rRBC'] = np.concatenate([rRBC[::-1], e['rRBC']])
                         else:
-                            break
-                    else:
-                        #number of RBCs randomly chosen to average htt
-                        number=np.exp(e['logNormal'][0]+e['logNormal'][1]*np.random.randn(1)[0])
-                        spacing = lrbc+lrbc*number
-                        if posFirst - spacing >= 0:
-                            if posFirst - spacing > e['length']:
-                                rRBC.append(e['length'])
-                                posFirst=e['length']
-                            else:
-                                rRBC.append(posFirst - spacing)
-                                posFirst=posFirst - spacing
-                            nMaxNew += -1
-                            cum_length = posFirst
-                            e['posFirst_last']=posFirst
-                        else:
-                            e['keep_rbcs']=[spacing]
-                            if len(rRBC) == 0:
-                                e['posFirst_last']=posFirst
-                            else:
-                                e['posFirst_last']=rRBC[-1]
-                            break
-                if len(e['keep_rbcs']) == 0:
-                    number=np.exp(e['logNormal'][0]+e['logNormal'][1]*np.random.randn(1)[0])
-                    spacing = lrbc+lrbc*number
-                    e['keep_rbcs']=[spacing]
-                rRBC = np.array(rRBC)
-                if len(rRBC) >= 1.:
-                    if e['sign'] == 1:
-                        e['rRBC'] = np.concatenate([rRBC[::-1], e['rRBC']])
-                        vertexUpdate.append(e['target'])
-                        vertexUpdate.append(e['source'])
-                        edgeUpdate.append(ei)
-                    else:
-                        e['rRBC'] = np.concatenate([e['rRBC'], length-rRBC])
+                            e['rRBC'] = np.concatenate([e['rRBC'], e['length']-rRBC])
                         vertexUpdate.append(e['target'])
                         vertexUpdate.append(e['source'])
                         edgeUpdate.append(ei)
             if noBifEvents > 0:
                 if vertex['vType'] == 6 or vertex['vType'] == 4:
-                    #Check if httBC exists
-                    boolHttEdge2 = 0
                     if e2['httBC'] is not None:
-                        boolHttEdge2 = 1
-                        rRBC2 = []
-                        lrbc = e2['minDist']
-                        htt = e2['httBC']
-                        length = e2['length']
-                        nMaxNew=e2['nMax']-len(e2['rRBC'])
-                        if len(e2['rRBC']) > 0:
-                            posFirst=e2['rRBC'][0] if e2['sign']==1.0 else e2['length']-e2['rRBC'][-1]
-                            e2['posFirst_last']=posFirst
-                            e2['v_last'] = e2['v']
-                            cum_length = posFirst
-                        else:
-                            cum_length = e2['posFirst_last'] + e2['v_last'] * dt
-                            posFirst = cum_length
-                            if e2['v'] > e2['v_last']:
-                                e2['v_last']=e2['v']
-                            e2['posFirst_last']=posFirst
-                        while cum_length >= lrbc and nMaxNew > 0:
-                            if len(e2['keep_rbcs']) != 0:
-                                if posFirst - e2['keep_rbcs'][0] >= 0:
-                                    if posFirst - e2['keep_rbcs'][0] > e2['length']:
-                                        rRBC2.append(e2['length'])
-                                        posFirst=e2['length']
-                                    else:
-                                        rRBC2.append(posFirst - e2['keep_rbcs'][0])
-                                        posFirst=posFirst - e2['keep_rbcs'][0]
-                                    nMaxNew += -1
-                                    cum_length = posFirst
-                                    e2['keep_rbcs']=[]
-                                    e2['posFirst_last']=posFirst
+                        if httBCDoneEdges[inE2] == 0:
+                            boolHttEdge2 = 1
+                            httBCDoneEdges[inE2] = 1
+                            rRBC2 = self._insert_RBCs_at_boundaryEdges(e2)
+                            if len(rRBC2) >= 1.:
+                                if e2['sign'] == 1:
+                                    e2['rRBC'] = np.concatenate([rRBC2[::-1], e2['rRBC']])
                                 else:
-                                    if len(e2['rRBC']) > 0:
-                                        e2['posFirst_last'] = posFirst
-                                    break
-                            else:
-                                #number of RBCs randomly chosen to average htt
-                                number=np.exp(e2['logNormal'][0]+e2['logNormal'][1]*np.random.randn(1)[0])
-                                spacing = lrbc+lrbc*number
-                                if posFirst - spacing >= 0:
-                                    if posFirst - spacing > e2['length']:
-                                        rRBC2.append(e2['length'])
-                                        posFirst=e2['length']
-                                    else:
-                                        rRBC2.append(posFirst - spacing)
-                                        posFirst=posFirst - spacing
-                                    nMaxNew += -1
-                                    cum_length = posFirst
-                                    e2['posFirst_last']=posFirst
-                                else:
-                                    e2['keep_rbcs']=[spacing]
-                                    if len(rRBC2) == 0:
-                                        e2['posFirst_last']=posFirst
-                                    else:
-                                        e2['posFirst_last']=rRBC2[-1]
-                                    break
-                        if len(e2['keep_rbcs']) == 0:
-                            number=np.exp(e2['logNormal'][0]+e2['logNormal'][1]*np.random.randn(1)[0])
-                            spacing = lrbc+lrbc*number
-                            e2['keep_rbcs']=[spacing]
-                        rRBC2 = np.array(rRBC2)
-                        if len(rRBC2) >= 1.:
-                            if e2['sign'] == 1:
-                                e2['rRBC'] = np.concatenate([rRBC2[::-1], e2['rRBC']])
-                                vertexUpdate.append(e2['target'])
-                                vertexUpdate.append(e2['source'])
-                                edgeUpdate.append(e2.index)
-                            else:
-                                e2['rRBC'] = np.concatenate([e2['rRBC'], length-rRBC2])
+                                    e2['rRBC'] = np.concatenate([e2['rRBC'], e2['length']-rRBC2])
                                 vertexUpdate.append(e2['target'])
                                 vertexUpdate.append(e2['source'])
                                 edgeUpdate.append(e2.index)
                     if vertex['vType']==4 and boolTrifurcation:
-                        #Check if httBC exists
-                        boolHttEdge3 = 0
                         if e3['httBC'] is not None:
-                            boolHttEdge3 = 1
-                            rRBC3 = []
-                            lrbc = e3['minDist']
-                            htt = e3['httBC']
-                            length = e3['length']
-                            nMaxNew=e3['nMax']-len(e3['rRBC'])
-                            if len(e3['rRBC']) > 0:
-                                posFirst=e3['rRBC'][0] if e3['sign']==1.0 else e3['length']-e3['rRBC'][-1]
-                                e3['posFirst_last']=posFirst
-                                e3['v_last'] = e3['v']
-                                cum_length = posFirst
-                            else:
-                                cum_length = e3['posFirst_last'] + e3['v_last'] * dt
-                                posFirst = cum_length
-                                if e3['v'] > e3['v_last']:
-                                    e3['v_last']=e3['v']
-                                e3['posFirst_last']=posFirst
-                            while cum_length >= lrbc and nMaxNew > 0:
-                                if len(e3['keep_rbcs']) != 0:
-                                    if posFirst - e3['keep_rbcs'][0] >= 0:
-                                        if posFirst - e3['keep_rbcs'][0] > e3['length']:
-                                            rRBC3.append(e3['length'])
-                                            posFirst=e3['length']
-                                        else:
-                                            rRBC3.append(posFirst - e3['keep_rbcs'][0])
-                                            posFirst=posFirst - e3['keep_rbcs'][0]
-                                        nMaxNew += -1
-                                        cum_length = posFirst
-                                        e3['keep_rbcs']=[]
-                                        e3['posFirst_last']=posFirst
+                            if httBCDoneEdges[inE3] == 0:
+                                boolHttEdge3 = 1
+                                httBCDoneEdges[inE3] = 1
+                                rRBC3 = self._insert_RBCs_at_boundaryEdges(e3)
+                                if len(rRBC3) >= 1.:
+                                    if e3['sign'] == 1:
+                                        e3['rRBC'] = np.concatenate([rRBC3[::-1], e3['rRBC']])
                                     else:
-                                        if len(e3['rRBC']) > 0:
-                                            e3['posFirst_last'] = posFirst
-                                        break
-                                else:
-                                    #number of RBCs randomly chosen to average htt
-                                    number=np.exp(e3['logNormal'][0]+e3['logNormal'][1]*np.random.randn(1)[0])
-                                    spacing = lrbc+lrbc*number
-                                    if posFirst - spacing >= 0:
-                                        if posFirst - spacing > e3['length']:
-                                            rRBC3.append(e3['length'])
-                                            posFirst=e3['length']
-                                        else:
-                                            rRBC3.append(posFirst - spacing)
-                                            posFirst=posFirst - spacing
-                                        nMaxNew += -1
-                                        cum_length = posFirst
-                                        e3['posFirst_last']=posFirst
-                                    else:
-                                        e3['keep_rbcs']=[spacing]
-                                        if len(rRBC3) == 0:
-                                            e3['posFirst_last']=posFirst
-                                        else:
-                                            e3['posFirst_last']=rRBC3[-1]
-                                        break
-                            if len(e3['keep_rbcs']) == 0:
-                                number=np.exp(e3['logNormal'][0]+e3['logNormal'][1]*np.random.randn(1)[0])
-                                spacing = lrbc+lrbc*number
-                                e3['keep_rbcs']=[spacing]
-                            rRBC3 = np.array(rRBC3)
-                            if len(rRBC3) >= 1.:
-                                if e3['sign'] == 1:
-                                    e3['rRBC'] = np.concatenate([rRBC3[::-1], e3['rRBC']])
+                                        e3['rRBC'] = np.concatenate([e3['rRBC'], e3['length']-rRBC3])
                                     vertexUpdate.append(e3['target'])
                                     vertexUpdate.append(e3['source'])
                                     edgeUpdate.append(e3.index)
-                                else:
-                                    e3['rRBC'] = np.concatenate([e3['rRBC'], length-rRBC3])
-                                    vertexUpdate.append(e3['target'])
-                                    vertexUpdate.append(e3['source'])
-                                    edgeUpdate.append(e3.index)
+            #TODO those are checks which are not necessary
             if noBifEvents != 0 or boolHttEdge == 1 or boolHttEdge2==1 or boolHttEdge3==1:
                 nRBCSumAfter=0
                 for i in edgesInvolved:
                     G.es[i]['nRBC']=len(G.es[i]['rRBC'])
                     nRBCSumAfter += G.es[i]['nRBC']
                 if nRBCSumBefore != nRBCSumAfter:
-                    #Check if outflow
                     if vertex['vType'] == 2:
                         if nRBCSumAfter + noBifEvents != nRBCSumBefore:
                             print('BIGERROR RBC CONSERVATION at outlet')
@@ -1975,39 +1632,19 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                                     print('BIGERROR RBC CONSERVATION at inlet')
                         else:
                             print('BIGERROR RBC CONSERVATION somewhere')
-                for i in edgesInvolved:
-                    edge = G.es[i]
+                for edge in G.es[edgesInvolved]:
                     if len(edge['rRBC']) > 0:
-                        if edge['rRBC'][0] > edge['rRBC'][-1] + eps:
-                            print('BIGERROR BEGINNING END')
                         if edge['rRBC'][0] < 0 - eps or edge['rRBC'][-1] > edge['length'] + eps:
                             print('BIGERROR BEGINNING END 2')
-                    for j in xrange(len(edge['rRBC'])-1):
-                        if edge['rRBC'][j] > edge['rRBC'][j+1] or edge['rRBC'][j+1]-edge['rRBC'][j] < edge['minDist']-eps:
-                            print('BIGERROR BEGINNING END 3')
-                            print(edge['rRBC'][j] > edge['rRBC'][j+1])
-                            print(edge['rRBC'][j+1]-edge['rRBC'][j] < edge['minDist']+eps)
-                            print(edge['rRBC'][j])
-                            print(edge['rRBC'][j+1])
-                            print(edge['rRBC'])
-                            print(edge.index)
+                    if True in ((edge['rRBC'][1::]-edge['rRBC'][:-1])<edge['minDist']-eps).tolist():
+                        print('BIGERROR BEGINNING END 3')
+                        print(edge['rRBC'][1::]-edge['rRBC'][:-1])
+                        print(edge['minDist'])
+                        print(((edge['rRBC'][1::]-edge['rRBC'][:-1])<edge['minDist']))
             if overshootsNo != 0:
                 vertexUpdate.append(e['target'])
                 vertexUpdate.append(e['source'])
-                for i in edgesInvolved:
-                    edgeUpdate.append(i)
-                if boolHttEdge:
-                    for i in e['rRBC']:
-                        if i < 0 or i > e['length']:
-                            print('BIGERROREND')
-                if boolHttEdge2:
-                    for i in e2['rRBC']:
-                        if i < 0 or i > e2['length']:
-                            print('BIGERROREND')
-                if boolHttEdge3:
-                    for i in e3['rRBC']:
-                        if i < 0 or i > e3['length']:
-                            print('BIGERROREND')
+                edgeUpdate=edgeUpdate+edgesInvolved
                 if self._analyzeBifEvents:
                     if vertex['vType'] == 3 or vertex['vType'] == 5:
                         rbcMoved += overshootsNo
@@ -2503,6 +2140,97 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                     positionPref=positionPref[:-1]
 
         return positionPref, boolFull
+    #----------------------------------------------------------------------------------------------------
+    def _doubleConnecting_update_inEdge_count(self,inEdge,index,count1,count2):
+        #TODO add description
+        """  
+        INPUT: oe: outEdge to which the RBC is added
+               positionPref: position of RBCs in new outEdge. Constrained by overshooting and
+                overlapping 
+               case: case=1 (default): it has already been checked that the RBC still fits into the vessel 
+                    (this is the case after the timeBlocked formulation). case=2 it still needs to be checked
+                    if the RBC has been pushed outside
+        OUTPUT: positionPref: updated list of positionPref (+1 RBC if it fits) 
+                boolFull: always 0 if case = 1 (because not needed), 1 if edge is full (only for case=2)
+        """
+        if inEdge[index] == 1:
+            count1 += 1
+        else:
+            count2 += 1
+
+        return count1,count2
+    #----------------------------------------------------------------------------------------------------
+
+    def _insert_RBCs_at_boundaryEdges(self,e):
+        #TODO add description
+        """
+        Insert new RBCs for inlet edges.
+        Uses some kind of logNormal distribution that satisfies (in the mean?)
+        the tube hematocrit boundary conditions.
+        INPUT: None.
+        OUTPUT: numpy array rRBC (TODO)
+        """
+        dt=self._dt
+        rRBC = []
+        lrbc = e['minDist']
+        htt = e['httBC']
+        length = e['length']
+        nMaxNew=e['nMax']-len(e['rRBC'])
+
+        if len(e['rRBC']) > 0:
+            posFirst=e['rRBC'][0] if e['sign']==1.0 else e['length']-e['rRBC'][-1]
+            e['posFirst_last']=posFirst
+            e['v_last'] = e['v']
+            cum_length = posFirst
+        else:
+            cum_length = e['posFirst_last'] + e['v_last'] * dt
+            posFirst = cum_length
+            e['posFirst_last']=posFirst
+            if e['v'] > e['v_last']:
+                e['v_last']=e['v']
+
+        while cum_length >= lrbc and nMaxNew > 0:
+            if len(e['keep_rbcs']) != 0:
+                if posFirst - e['keep_rbcs'][0] < 0:
+                    break
+                if posFirst - e['keep_rbcs'][0] > e['length']:
+                    rRBC.append(e['length'])
+                    posFirst=e['length']
+                else:
+                    rRBC.append(posFirst - e['keep_rbcs'][0])
+                    posFirst=posFirst - e['keep_rbcs'][0]
+                nMaxNew -= 1
+                cum_length = posFirst
+                e['keep_rbcs']=[]
+                e['posFirst_last']=posFirst
+            else:
+                number=np.exp(e['logNormal'][0]+e['logNormal'][1]*np.random.randn(1)[0])
+                spacing = lrbc+lrbc*number
+                if posFirst - spacing >= 0:
+                    if posFirst - spacing > e['length']:
+                        rRBC.append(e['length'])
+                        posFirst=e['length']
+                    else:
+                        rRBC.append(posFirst - spacing)
+                        posFirst=posFirst - spacing
+                    nMaxNew += -1
+                    cum_length = posFirst
+                    e['posFirst_last']=posFirst
+                else:
+                    e['keep_rbcs']=[spacing]
+                    if len(rRBC) == 0:
+                        e['posFirst_last']=posFirst
+                    else:
+                        e['posFirst_last']=rRBC[-1]
+                    break
+
+        if len(e['keep_rbcs']) == 0:
+            number=np.exp(e['logNormal'][0]+e['logNormal'][1]*np.random.randn(1)[0])
+            spacing = lrbc+lrbc*number
+            e['keep_rbcs']=[spacing]
+
+        return np.array(rRBC)
+
     #--------------------------------------------------------------------------
     #@profile
     def evolve(self, time, method, dtfix,**kwargs):
@@ -3005,5 +2733,3 @@ class LinearSystemHtdTotFixedDT_NEW(object):
         """
         return np.linalg.norm(self._A * self._x - self._b)
                 
-
-                   
