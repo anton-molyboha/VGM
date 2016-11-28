@@ -8,6 +8,7 @@ from scipy import (array, arccos, argmin, concatenate, dot, ones, mean, pi,
                    shape, unique, weave)
 from scipy.linalg import norm
 from scipy.spatial import kdtree
+from scipy.interpolate import griddata
 #THOSE lines produce error sometimes switch them off
 from sympy.solvers import solve
 from sympy import Symbol
@@ -22,8 +23,6 @@ __all__ = ['add_geometric_edge_properties', 'add_fluiddynamical_properties',
 
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
-
-
 def add_geometric_edge_properties(G):
     """ Adds angle to cortical surface (in degrees), cortical depth, volume and
     cross section to each edge in the graph.
@@ -332,9 +331,14 @@ def intersection_plane_line(pP,nP,pL,vL):
     else:
         coordsPoint = []
 
-    return coordsPoint
+    newCoordsPoint=[]
+    for coords in coordsPoint:
+        newCoordsPoint.append(np.float(coords))
+
+    return np.array(newCoordsPoint)
 #------------------------------------------------------------------------------
-def make_graph_gased_on_points(pL,G):
+#------------------------------------------------------------------------------
+def make_graph_based_on_points(pL,G):
     """creates a graph with the points given (for visualization in paraview)
     INPUT: pL: point list
            G: main Graph
@@ -352,3 +356,192 @@ def make_graph_gased_on_points(pL,G):
     Gnew.vs['indexOrig']=indexOrig
 
     return Gnew
+#------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+def get_edges_in_sphere(G,centerSphere,radiusSphere,nkinds,radiusSphereMin=0):
+    """ Returns a list of edges which lie in the specified sphere. The function 
+    uses the tortuous vessel properties (if one of the points of the vessel is 
+    located inside the sphere the vessel is considered to be in the sphere)
+    INPUT: G: main Graph
+           centerSphere: the coordinates of the center of the sphere
+           radiusSphere: the radius of the center of the sphere
+           nkinds: list of vessel kinds which should be considered
+           radiusSphereMin: default = 0, a value between [0,radiusSphere] can be
+           given. vessels inside the sphereMin are not considered
+    OUTPUT: edges: list of edges where at least one point along the edge is
+            located inside the sphere
+    """
+    #Get tortuous values of all edges of interest
+    rAll=[]
+    edgeAll=[]
+    for nkind in nkinds:
+        for e in G.es(nkind_eq=nkind):
+            for i in e['points']:
+                rAll.append(i)
+                edgeAll.append(e.index)
+
+    Kdt = kdtree.KDTree(rAll, leafsize=10)
+    kAll=100
+    nearestAll = Kdt.query(centerSphere,k=kAll)
+    nearestDist=nearestAll[0]
+    nearestIndex=nearestAll[1]
+    largestDist=nearestDist[-1]
+    while largestDist < radiusSphere:
+        kAll += 100
+        nearestAll = Kdt.query(centerSphere,k=kAll)
+        nearestDist=nearestAll[0]
+        nearestIndex=nearestAll[1]
+        largestDist=nearestDist[-1]
+
+    edges=[]
+    for i,j in zip(nearestIndex,nearestDist):
+        if edgeAll[i] not in edges and j < radiusSphere and j>=radiusSphereMin:
+            edges.append(edgeAll[i])
+    
+    return edges
+#------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+def get_edges_intersecting_with_plane(G,pP,nP,nkinds):
+    """ Returns a list of edges which intersect with a given plane of interest ().
+    The normal vector of the plane has to be parallel to one of the axes of our
+    coordinate system.
+    The intersection Points of each edge are also returned.
+    INPUT: G: main Graph
+           pP: coordinated on the plane of interest
+           nP: normal vector of the plane (has to be [1,0,0],[0,1,0] or [0,0,1])
+           nkinds: list of vessel kinds which should be considered
+    OUTPUT: edges: list of edges which intersect with the plane of interest
+            intersectionCoords: coordinates of the intersectionPoints
+    """
+
+    nP=list(nP)
+    if int(nP[0]) == 1:
+        case=0 #normal vector in x direction
+    elif int(nP[1]) == 1:
+        case=1 #normal vector in y direction
+    elif int(nP[2]) == 1:
+        case=2 #normal vector in z direction
+
+    edges=[]
+    intersectionCoords=[]
+    for nkind in nkinds:
+        for e in G.es(nkind_eq=nkind):
+            if e['points'][0][case]==pP[case]:
+                edges.append(e.index)
+                intersectionCoords.append(e['points'][j])
+            for j in range(len(e['points'])-1):
+                if (e['points'][j][case] > pP[case] and e['points'][j+1][case] < pP[case]) or (e['points'][j][case] < pP[case] and e['points'][j+1][case] > pP[case]):
+                      pL=e['points'][j]
+                      nL=e['points'][j]-e['points'][j+1]
+                      coords=intersection_plane_line(pP,nP,pL,nL)
+                      edges.append(e.index)
+                      intersectionCoords.append(coords)
+                elif e['points'][j+1][case]==pP[case]:
+                    edges.append(e.index)
+                    intersectionCoords.append(e['points'][j+1])
+
+    return edges, intersectionCoords
+#------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+def planePlots_paraview(G,edges,intersectionCoords,attribute,filename,interpMethod='linear',gridpoints=100):
+    """ Interpolates values on a grid based on the intersection of edges with a plane.
+    It outputs a .vtp and a .pkl file to be read into paraview. It returns the grid and the 
+    interpolated values at those locations (those can be processed to produce a contour plot in matplotlib)
+    INPUT: G: main Graph
+           edges: edges which intersect with the plane of interst
+           intersectionCoords: coordinates intersection points
+           attribute: that should be plotted
+           filename: filename (including path) of the .vtp  and .pkl file 
+               which will be saved (without file type extension)
+           interpMethod: the interpolation method of scipy.interpolate.griddata
+               common choices: 'nearest','linear' (default),'cubic'
+           gridpoints: number of gridpoints (default = 100)
+    OUTPUT: .pkl and .vtp file is written
+           grid_d1,grid_d2: grid values
+           valuesGrid: interpolated attribute values for the grid
+           case: integer to define if the normal vector is in x- (case=1),
+               y- (case=2) or in z-direction (case=3)
+    """
+
+    values=G.es[edges][attribute]
+    x=[]
+    y=[]
+    z=[]
+    for coord in coords:
+        x.append(coord[0])
+        y.append(coord[1])
+        z.append(coord[2])
+    
+    if len(np.unique(x)) < len(np.unique(y)) and len(np.unique(x)) < len(np.unique(z)):
+        case=1
+        d1Min=np.min(y)
+        d1Max=np.max(y)
+        d2Min=np.min(z)
+        d2Max=np.max(z)
+        d1=y
+        d2=z
+    elif len(np.unique(y)) < len(np.unique(x)) and len(np.unique(y)) < len(np.unique(z)):
+        case=2
+        d1Min=np.min(x)
+        d1Max=np.max(x)
+        d2Min=np.min(z)
+        d2Max=np.max(z)
+        d1=x
+        d2=z
+    elif len(np.unique(z)) < len(np.unique(y)) and len(np.unique(z)) < len(np.unique(x)):
+        case=3
+        d1Min=np.min(x)
+        d1Max=np.max(x)
+        d2Min=np.min(y)
+        d2Max=np.max(y)
+        d1=x
+        d2=y
+
+    grid_d1,grid_d2=np.mgrid[d1Min:d1Max:(d1Max-d1Min)/100,d2Min:d2Max:(d2Max-d2Min)/100]
+    valuesGrid=griddata(zip(d1,d2),values,(grid_d1,grid_d2),method=interpMethod)
+    
+    r=[]
+    for coord1 in np.arange(d1Min,d1Max,(d1Max-d1Min)/100):
+        for coord2 in np.arange(d2Min,d2Max,(d2Max-d2Min)/100):
+            if case == 1:
+                r.append(np.array([x[0],coord1,coord2]))
+            elif case == 2:
+                r.append(np.array([coord1,y[0],coord2]))
+            elif case == 3:
+                r.append(np.array([coord1,coord2,z[0]]))
+    
+    valuesGridList=[]
+    for j in valuesGrid:
+        for k in j:
+            valuesGridList.append(k)
+    
+    planeG=vgm.VascularGraph(len(r))
+    planeG.vs['r']=r
+    planeG.vs[attribute]=valuesGridList
+    vgm.write_vtp(planeG,filename+'.vtp',False)
+    vgm.write_pkl(planeG,filename+'.pkl')
+
+    return grid_d1,grid_d2,valuesGrid,case
+
+#------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+def contourPlots(grid_d1,grid_d2,valuesGrid,case):
+    """ Interpolates values on a grid based on the intersection of edges with a plane.
+    It outputs a .vtp and a .pkl file to be read into paraview. It returns the grid and the 
+    interpolated values at those locations (those can be processed to produce a contour plot in matplotlib)
+    INPUT: G: main Graph
+           edges: edges which intersect with the plane of interst
+           intersectionCoords: coordinates intersection points
+           attribute: that should be plotted
+           filename: filename (including path) of the .vtp  and .pkl file 
+               which will be saved (without file type extension)
+           interpMethod: the interpolation method of scipy.interpolate.griddata
+               common choices: 'nearest','linear' (default),'cubic'
+           gridpoints: number of gridpoints (default = 100)
+    OUTPUT: .pkl and .vtp file is written
+           grid_d1,grid_d2: grid values
+           valuesGrid: interpolated attribute values for the grid
+           case: integer to define if the normal vector is in x- (case=1),
+               y- (case=2) or in z-direction (case=3)
+    """
+

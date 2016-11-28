@@ -321,17 +321,14 @@ cdef class Physiology(object):
 
     cpdef discharge_to_tube_hematocrit(self, double discharge_ht, double d,
                                        bint invivo):
-        """Converts tube hematocrit to discharge hematocrit based on the
-        formula provided by Pries and Neuhaus 1992.
-        The extension to in-vivo was presented in a 2005 paper 'Microvascular
-        blood viscosity in vivo and the endothelial surface layer'.
-        Note that this is the 'rat blood' version of the formula. 
-        #If other species are considered the diameter dependent exponents have be
-        scaled with the cube root of the mean red blood cell volume (rat 55fl, human 92fl). ?
+        """Converts discharge hematocrit to tube hematocrit based on the
+        formulas provided by Pries 2005 ('Microvascular
+        blood viscosity in vivo and the endothelial surface layer')
+        It can be chosen from an invivo and an invitro formulation.
         INPUT: discharge_ht: Discharge Ht expressed as a fraction [0,1]
-               d: Diameter of the vessel.
+               d: Diameter of the vessel (in microns)
                invivo: Boolean, whether or not to consider ESL influence.
-        OUTPUT: discharge_hematocrit: Discharge Ht expressed as a fraction 
+        OUTPUT: tube_hematocrit: Tube hematocrit expressed as a fraction
                 [0,1]
         """
         
@@ -362,20 +359,20 @@ cdef class Physiology(object):
     cpdef tube_to_discharge_hematocrit(self, double tube_ht, double d, 
                                        bint invivo):
         """Converts tube hematocrit to discharge hematocrit based on the
-        formula provided by Pries and Neuhaus 1992.
-        Note that this is the 'rat blood' version of the formula. The
-        diameter dependent exponents have been scaled with the cube
-        root of the mean red blood cell volume (rat 55fl, human 92fl).
-        The extension to in-vivo was presented in a 2005 paper 'Microvascular
-        blood viscosity in vivo and the endothelial surface layer'.
-        If the diameter is > 1000 micrometers the invitro formulation does not work
-        anymore. The discharge hematocrit is set equal to the tube hematocrit
-        INPUT: tube_ht: Tube Ht expressed as a fraction [0,1]
-               d: Diameter of the vessel.          
+        formulas provided by Pries 2005 ('Microvascular
+        blood viscosity in vivo and the endothelial surface layer')
+        It can be chosen from an invivo and an invitro formulation.
+        Special cases: If the diameter is > 1000 micrometers the invitro formulation 
+        does not work anymore. The discharge hematocrit is set equal to the tube hematocrit. 
+        In extreme cases in both formulations a htd > 1.0 can be obtained. htd is always 
+        bounded to 1.0.
+        INPUT: tube_ht: Discharge Ht expressed as a fraction [0,1]
+               d: Diameter of the vessel (in microns)
                invivo: Boolean, whether or not to consider ESL influence.
-        OUTPUT: discharge_hematocrit: Discharge Ht expressed as a fraction 
+        OUTPUT: discharge_hematocrit: Discharge Ht expressed as a fraction
                 [0,1]
         """
+
         
         cdef double dph, htd, x
 
@@ -441,34 +438,34 @@ cdef class Physiology(object):
     cpdef relative_apparent_blood_viscosity(self, double diameter, 
                                             double discharge_hematocrit,
                                             bint invivo):
-        """Returns the relative apparent blood-viscosity value, according to 
+        """Returns the relative apparent blood-viscosity value, according to
         the given vessel specifications and discharge hematocrit.
-        
+
         'Apparent', because the viscosity of blood as a suspension is not an
         intrinsic fluid property, but depends on the vessel size.
-        'Relative', because the viscosity is scaled to (divided by) the 
-        viscosity of the solvent, i.e. the viscosity of blood plasma (as such, 
+        'Relative', because the viscosity is scaled to (divided by) the
+        viscosity of the solvent, i.e. the viscosity of blood plasma (as such,
         it should also be independent of temperature, Barbee 1973).
-        Fit function taken from Pries 1992 (Blood viscosity in tube flow: 
-        dependence on diameter and hematocrit). It is assumed that the relative 
-        apparent viscosity is a fraction of dynamic (as opposed to kinematic) 
-        viscosities, although this is not stated explicitly in the paper. The 
-        error would be small if this is not the case, because the densities of 
+        Fit function taken from Pries 1992 (Blood viscosity in tube flow:
+        dependence on diameter and hematocrit). It is assumed that the relative
+        apparent viscosity is a fraction of dynamic (as opposed to kinematic)
+        viscosities, although this is not stated explicitly in the paper. The
+        error would be small if this is not the case, because the densities of
         plasma and RBCs do not differ significantly (<10%).
-        INPUT: diameter: Vessel diameter.
+        INPUT: diameter: Vessel diameter (in microns)
                discharge_hematocrit: Discharge Ht expressed as a fraction [0,1]
-               invivo: This boolean determines whether to compute in vivo 
+               invivo: This boolean determines whether to compute in vivo
                        viscosity or in vitro.
         OUTPUT: Relative apparent blood viscosity [1.0]
-        """    
+        """
 
         cdef double d, ht_d, nu45, c, nu, deff
         
-        # The fit function yields inf, if the discharge_hematocrit is 1.0. 
-        # Return a bounded numerical value instead:
-        if discharge_hematocrit >= 1.0:
-            return 1e20
-        
+        #if discharge_hematocrit=1 we use 0.99 for the calculation, otherwise the function yields inf)
+        if discharge_hematocrit == 1.0:
+            discharge_hematocrit = 0.99
+                                   
+ 
         # The fit function assumes diameters in [micron]. Conversion from 
         # default units is performed as required.
         sf = self._sf['um -> du']

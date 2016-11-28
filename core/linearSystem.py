@@ -256,9 +256,6 @@ class LinearSystem(object):
         if 'resistance' in G.es.attribute_names():
             del(G.es['resistance'])
 
-        if 'rBC' in G.vs.attribute_names():
-            del(G.vs['rBC'])
-
         G.vs[pBCneNone]['pBC']=np.array(G.vs[pBCneNone]['pBC'])*(1/vgm.units.scaling_factor_du('mmHg',G['defaultUnits']))
 
         vgm.write_pkl(G, 'G_final.pkl')
