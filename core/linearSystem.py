@@ -133,9 +133,9 @@ class LinearSystem(object):
                 dischargeHt,G.es['diameter'])]
             G.es['conductance']=1/np.array(G.es['effResistance'])
         else: 
-	    # Compute conductance
+            # Compute conductance
             for e in G.es:
-	        e['conductance']=1/e['resistance']
+                e['conductance']=1/e['resistance']
         
             #if not bound_cond is None:
             #    self._conductance = [max(min(c, bound_cond[1]), bound_cond[0])
@@ -237,10 +237,10 @@ class LinearSystem(object):
         if self._withRBC:
             for e in G.es:
                 dischargeHt = min(htt2htd(e['htt'], e['diameter'], self._invivo), 1.0)
-	        e['v']=dischargeHt/e['htt']*e['flow']/(0.25*np.pi*e['diameter']**2)
+                e['v']=dischargeHt/e['htt']*e['flow']/(0.25*np.pi*e['diameter']**2)
         else:
             for e in G.es:
-	        e['v']=e['flow']/(0.25*np.pi*e['diameter']**2)
+                e['v']=e['flow']/(0.25*np.pi*e['diameter']**2)
         
         #Convert 'pBC' from default Units to mmHg
         pBCneNone=G.vs(pBC_ne=None).indices
@@ -261,8 +261,8 @@ class LinearSystem(object):
         vgm.write_pkl(G, 'G_final.pkl')
         vgm.write_vtp(G, 'G_final.vtp',False)
 
-	#Write Output
-	sampledict={}
+        #Write Output
+        sampledict={}
         for eprop in ['flow', 'v']:
             if not eprop in sampledict.keys():
                 sampledict[eprop] = []
@@ -272,7 +272,7 @@ class LinearSystem(object):
                 sampledict[vprop] = []
             sampledict[vprop].append(G.vs[vprop])
 
-	g_output.write_pkl(sampledict, 'sampledict.pkl')
+        g_output.write_pkl(sampledict, 'sampledict.pkl')
     #--------------------------------------------------------------------------
 
     def _verify_mass_balance(self):
