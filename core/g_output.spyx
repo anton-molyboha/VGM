@@ -2,13 +2,12 @@
 #from __future__ import division, with_statement
 
 from copy import deepcopy
-import cPickle
+import pickle
 import matplotlib.pyplot as plt
 import numpy as np
 import cython
 cimport numpy as np
 cimport libc.stdio as stdio
-from pylab import is_string_like
 
 __all__ = ['write_mv3d', 'write_vtp', 'write_pvd_time_series', 'write_graphml',
            'write_pkl', 'write_amira_mesh_ascii', 'write_landmarks']
@@ -58,7 +57,7 @@ cdef void write_array(stdio.FILE* f, array, name, int zeros=0, verbose=False):
     array. This is required when the graph contains unconnected vertices.
     TODO: Make printing integer arrays work!
     """    
-    tab = "  "
+    tab = b"  "
     cdef float substituteD = -1000.
     cdef int substituteI = -1000
     cdef float zeroD = 0.
@@ -79,32 +78,32 @@ cdef void write_array(stdio.FILE* f, array, name, int zeros=0, verbose=False):
       
     if type(firstel) == str:
         if verbose:
-            print "WARNING: array '%s' contains data of type 'string'!" % name    
+            print("WARNING: array '{}' contains data of type 'string'!".format(name))
         return    # Cannot have string-representations in paraview.
     if "<type 'NoneType'>" in map(str, np.unique(np.array(map(type, array)))):
         if verbose:
-            print "WARNING: array '%s' contains data of type 'None'!" % name
+            print("WARNING: array '{}' contains data of type 'None'!".format(name))
         return        
     if any([type(firstel) == x for x in 
              [float, np.float32, np.float64, np.float128]]):
         atype = "Float32"
-        format = "%f"
+        format = b"%f"
     elif any([type(firstel) == x for x in 
              [int, np.int8, np.int32, np.int64]]):
         #atype = "Float32"
         #format = "%f"     
         atype = "Int32"
-        format = "%i"
+        format = b"%i"
     else: 
         if verbose:
-            print "WARNING: array '%s' contains data of unknown type!" % name  
+            print("WARNING: array '{}' contains data of unknown type!".format(name))
         return
                   
     stdio.fprintf(f, '%s<DataArray type="%s" Name="%s" ',  cs(4*tab), cs(atype), cs(name))
     stdio.fprintf(f, 'NumberOfComponents="%i" format="ascii">\n', ci(noc))
     
-    fstringAp = "%s"+format+"\n"        
-    fstringBp = format + " "
+    fstringAp = b"%s"+format+b"\n"        
+    fstringBp = format + b" "
     spacep = 5*tab
     
 
@@ -462,7 +461,7 @@ def write_pkl(G,filename):
     """
 
     with open(filename,'wb') as f:
-        cPickle.dump(G,f,protocol=2)
+        pickle.dump(G,f,protocol=2)
     
 
 # -----------------------------------------------------------------------------

@@ -9,12 +9,14 @@ from scipy.sparse.linalg import gmres
 from scipy import array, finfo, ones, sparse, zeros
 from scipy.sparse import lil_matrix, linalg
 import copy
-from physiology import Physiology
-import g_output
+from .physiology import Physiology
+from . import g_output
 import vgm
+import logging
 
 __all__ = ['LinearSystemPries']
-log = vgm.LogDispatcher.create_logger(__name__)
+# log = vgm.LogDispatcher.create_logger(__name__)
+log = logging.getLogger()
 
 #------------------------------------------------------------------------------
 #------------------------------------------------------------------------------
@@ -47,36 +49,36 @@ class LinearSystemPries(object):
                          original htd-distribution, if only a minor change from
                          the current state is to be expected (faster to obtain
                          the solution).
-	       **kwargs:
-		    httBC: tube hematocrit boundary condition at inflow (edge)
-		    htdBC: discharge hematocrit boundary condition at inflow (vertex)
+               **kwargs:
+                    httBC: tube hematocrit boundary condition at inflow (edge)
+                    htdBC: discharge hematocrit boundary condition at inflow (vertex)
                     plasmaType: if it is not given, the default value is used. option two: --> francesco: plasma value of francescos simulations
                     species: what type of animal we are dealing with --> relevant for the rbc volume that is used, default is rat
-		    
+                    
         OUTPUT: None
         """
         self._G = G
         self._invivo=invivo
         self._P = Physiology(G['defaultUnits'])
         self._eps = 1e-7 #finfo(float).eps * 1e4
-	htt2htd=self._P.tube_to_discharge_hematocrit
+        htt2htd=self._P.tube_to_discharge_hematocrit
 
         if kwargs.has_key('httBC'):
             for vi in G['av']:
                 for ei in G.adjacent(vi):
                     G.es[ei]['httBC']=kwargs['httBC']
-		    htdBC = htt2htd(kwargs['httBC'],G.es[ei]['diameter'],invivo)
-	        G.vs[vi]['htdBC']=htdBC
-	if kwargs.has_key('htdBC'):
-	    for vi in G['av']:
-		G.vs[vi]['htdBC']=kwargs['htdBC']	
+                    htdBC = htt2htd(kwargs['httBC'],G.es[ei]['diameter'],invivo)
+                G.vs[vi]['htdBC']=htdBC
+        if kwargs.has_key('htdBC'):
+            for vi in G['av']:
+                G.vs[vi]['htdBC']=kwargs['htdBC']        
 
-	if kwargs.has_key('plasmaType'):
+        if kwargs.has_key('plasmaType'):
             self._plasmaType=kwargs['plasmaType']
         else:
             self._plasmaType='default'
 
-	if kwargs.has_key('species'):
+        if kwargs.has_key('species'):
             self._species=kwargs['species']
         else:
             self._species='rat'
@@ -88,8 +90,8 @@ class LinearSystemPries(object):
                 for ei in G.adjacent(vi):
                     if 'httBC' in G.es.attribute_names():
                         if G.es[ei]['httBC'] != None:
-		            htdBC = htt2htd(G.es[ei]['httBC'],G.es[ei]['diameter'],invivo)
-	                    G.vs[vi]['htdBC']=htdBC
+                            htdBC = htt2htd(G.es[ei]['httBC'],G.es[ei]['diameter'],invivo)
+                            G.vs[vi]['htdBC']=htdBC
                         else:
                             for ei in G.adjacent(vi):
                                 htdlist.append(self._P.discharge_hematocrit(
@@ -215,7 +217,7 @@ class LinearSystemPries(object):
 
         self._A = A
         self._b = b
-	self._G = G
+        self._G = G
 
     #--------------------------------------------------------------------------
 
@@ -241,7 +243,7 @@ class LinearSystemPries(object):
         #pse = self._P.phase_separation_effect_step
 
         # Copy current htd:
-	oldRbcFlow = copy.deepcopy(G.es['rbcFlow'])
+        oldRbcFlow = copy.deepcopy(G.es['rbcFlow'])
         G.es['rbcFlow'] = [0.0 for e in G.es]
         G.es['htd'] = [0.0 for e in G.es]
 
@@ -280,23 +282,23 @@ class LinearSystemPries(object):
             # Only edges without hematocrit BC are included in the distribution
             # algorithm:
             outEdges = copy.deepcopy(trimmedOutEdges)
-	    NoOutEdges=len(outEdges)
+            NoOutEdges=len(outEdges)
 
             if len(outEdges) == 0:
                 continue
             elif len(outEdges) == 1:
                 outEdge = outEdges[0]
                 rbcFlowIn = 0.0
-		FlowIn = 0.0
+                FlowIn = 0.0
                 for inEdge in inEdges:
                     rbcFlowIn += G.es[inEdge]['rbcFlow']
-		    FlowIn += G.es[inEdge]['flow']
-		if len(inEdges) == 0:
-		    G.es[outEdge]['htd']=G.es[outEdge]['htdBC']
-		    G.es[outEdge]['rbcFlow']=G.es[outEdge]['flow']*G.es[outEdge]['htd']
-		else:
+                    FlowIn += G.es[inEdge]['flow']
+                if len(inEdges) == 0:
+                    G.es[outEdge]['htd']=G.es[outEdge]['htdBC']
+                    G.es[outEdge]['rbcFlow']=G.es[outEdge]['flow']*G.es[outEdge]['htd']
+                else:
                     G.es[outEdge]['rbcFlow'] = rbcFlowIn
-		    G.es[outEdge]['htd'] = min(rbcFlowIn/FlowIn,htdLimit)
+                    G.es[outEdge]['htd'] = min(rbcFlowIn/FlowIn,htdLimit)
                 if G.es[outEdge]['htd'] < 0:
                     print('ERROR 1 htd smaller than 0')
             else:
@@ -311,10 +313,10 @@ class LinearSystemPries(object):
                         oe0, oe1 = G.es[edgepair]
                         flowSum = sum(G.es[edgepair]['flow'])
                         if flowSum > 0.0:
-			    relativeValue=oe0['flow']/flowSum
-			    #stdout.write("\r oe0/flowSum = %f        \n" % relativeValue)
-			    #if oe0['flow']/flowSum > 0.49 and oe0['flow']/flowSum < 0.51:
-		                #stdout.write("\r NOW        \n")
+                            relativeValue=oe0['flow']/flowSum
+                            #stdout.write("\r oe0/flowSum = %f        \n" % relativeValue)
+                            #if oe0['flow']/flowSum > 0.49 and oe0['flow']/flowSum < 0.51:
+                                #stdout.write("\r NOW        \n")
                             f0 = pse(oe0['flow'] / flowSum,
                                      oe0['diameter'], oe1['diameter'],
                                     df, htdIn)
@@ -342,20 +344,20 @@ class LinearSystemPries(object):
 
                     outFractions[sortedOutEdges[-1][1]] = remainingFraction
 
-		    #Outflow in second outEdge is calculated by the difference of inFlow and OutFlow first
-		    #outEdge
-		    count = 0 
+                    #Outflow in second outEdge is calculated by the difference of inFlow and OutFlow first
+                    #outEdge
+                    count = 0 
                     for outEdge in outEdges:
                         G.es[outEdge]['rbcFlow'] += G.es[inEdge]['rbcFlow'] * \
                                                     outFractions[outEdge]
                         #stdout.write("\r outEdge = %g        \n" %outEdge)
                         #stdout.write("\r G.es[outEdge]['rbcFlow'] = %f        \n" %G.es[outEdge]['rbcFlow'])
 
-		        if count == 0:
+                        if count == 0:
                             G.es[outEdge]['rbcFlow'] = oldRbcFlow[outEdge] + \
                                 (G.es[outEdge]['rbcFlow'] - oldRbcFlow[outEdge]) * limiter
-		        elif count == 1:
-		            G.es[outEdge]['rbcFlow']=G.es[inEdge]['rbcFlow']-G.es[outEdges[0]]['rbcFlow']
+                        elif count == 1:
+                            G.es[outEdge]['rbcFlow']=G.es[inEdge]['rbcFlow']-G.es[outEdges[0]]['rbcFlow']
                         #stdout.write("\r LIMITED: G.es[outEdge]['rbcFlow'] = %f        \n" %G.es[outEdge]['rbcFlow'])
                         count += 1
 
@@ -425,7 +427,7 @@ class LinearSystemPries(object):
                             G.vs[edge.target]['pressure']) *  \
                         edge['conductance'] for edge in G.es]
 
-	self._maxPDiff=maxPDiff
+        self._maxPDiff=maxPDiff
         self._meanPDiff=meanPDiff
         self._medianPDiff=medianPDiff
 
@@ -475,7 +477,7 @@ class LinearSystemPries(object):
         """
         G = self._G
         P = self._P
-	invivo=self._invivo
+        invivo=self._invivo
         if precision is None: precision = self._eps
         iterationCount = 0
         maxPDiff = 1e200
@@ -488,9 +490,9 @@ class LinearSystemPries(object):
             stdout.write("\rITERATION %g \n" %iterationCount)
             self._rheological_analysis(None, False, limiter=0.5)
             maxPDiff, meanPDiff, medianPDiff = self._linear_analysis(method, **kwargs)
-	    #maxPDiff=self._maxPDiff
-	    #meanPDiff=self._meanPDiff
-	    #medianPDiff=self._medianPDiff
+            #maxPDiff=self._maxPDiff
+            #meanPDiff=self._meanPDiff
+            #medianPDiff=self._medianPDiff
             log.info('Iteration %i of %i' % (iterationCount+1, maxIterations))
             log.info('maximum pressure change: %.2e' % maxPDiff)
             log.info('mean pressure change: %.2e' % meanPDiff)
@@ -518,8 +520,8 @@ class LinearSystemPries(object):
         G.es['nMax'] = [np.pi * e['diameter']**2 / 4 * e['length'] / vrbc
                         for e in G.es]
         G.es['minDist'] = [e['length'] / e['nMax'] for e in G.es]
-	G.es['nRBC'] =[e['htt']*e['length']/e['minDist'] for e in G.es]
-	G.es['v']=[4 * e['flow'] * P.velocity_factor(e['diameter'], invivo, tube_ht=e['htt']) /
+        G.es['nRBC'] =[e['htt']*e['length']/e['minDist'] for e in G.es]
+        G.es['v']=[4 * e['flow'] * P.velocity_factor(e['diameter'], invivo, tube_ht=e['htt']) /
                      (np.pi * e['diameter']**2) if e['htt'] > 0 else
                      4 * e['flow'] / (np.pi * e['diameter']**2)
                      for e in G.es]
@@ -532,7 +534,7 @@ class LinearSystemPries(object):
         g_output.write_pvd_time_series('sequence.pvd', filenames)
         vgm.write_pkl(G, 'G_final.pkl')
 
-	stdout.flush()
+        stdout.flush()
         return convergenceHistory
         return G
 

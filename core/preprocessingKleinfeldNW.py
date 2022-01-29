@@ -7,10 +7,10 @@ from pyamg import smoothed_aggregation_solver, rootnode_solver, util
 from scipy import finfo, ones, zeros
 from scipy.sparse import lil_matrix, linalg, coo_matrix
 from scipy.sparse.linalg import gmres
-from physiology import Physiology
-import units
-import g_output
-import vascularGraph
+from .physiology import Physiology
+from . import units
+from . import g_output
+from . import vascularGraph
 import pdb
 import time as ttime
 import vgm

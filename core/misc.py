@@ -13,8 +13,8 @@ from scipy.interpolate import griddata
 from sympy.solvers import solve
 from sympy import Symbol
 
-from linearSystem import LinearSystem
-from physiology import Physiology 
+from .linearSystem import LinearSystem
+from .physiology import Physiology 
 
 __all__ = ['add_geometric_edge_properties', 'add_fluiddynamical_properties',
            'vertices_from_coordinates', 'add_kind_and_conductance', 

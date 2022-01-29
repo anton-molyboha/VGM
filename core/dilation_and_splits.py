@@ -13,7 +13,7 @@ def split_edges_prior_to_central_dilation(G='G_standard.pkl',
     prepare them for central dilation / constriction. 
     WARNING: For newly added edges the source is always the smaller
              vertex index and the target the higher vertex index. This needs to
-	     be considered in post-processing (e.g. flow direction, position of RBCs)
+             be considered in post-processing (e.g. flow direction, position of RBCs)
     INPUT: G: VascularGraph
            edges: Edges to be split
            savename: Name of VascularGraph with split-edges to be saved to
@@ -41,25 +41,25 @@ def split_edges_prior_to_central_dilation(G='G_standard.pkl',
 #-------------------------------------------------------------------------------------------
 
 def split_and_evolve_to_steady_state(G='G_standard',edges=[3],fdilation=[1.0],
-			   time=4.0e3, ht0=0.4, Greference=None,
+                           time=4.0e3, ht0=0.4, Greference=None,
                            plotPrms=[0., 4.0e3, 5e1, True],
                            samplePrms=[0., 4.0e3, 2, True],cf=0.8,**kwargs):
     """Test effect of central dilation at a bifurcation of equal-flow daughter
     vessels.
     WARNING: For newly added edges the source is always the smaller
              vertex index and the target the higher vertex index. This needs to
-	     be considered in post-processing (e.g. flow direction, position of RBCs)
+             be considered in post-processing (e.g. flow direction, position of RBCs)
     INPUT: G: Input Graph as pkl-file (name without the ending .pkl)
-  	   edges: list of edges which are dilated
-	   fdilation: list of factors by which the edge diameter is changed
-	   time: time periode which is evolved
+             edges: list of edges which are dilated
+           fdilation: list of factors by which the edge diameter is changed
+           time: time periode which is evolved
            ht0: initial tube hematocrit value throughout the VascularGraph
                 (this is ignored if Greference is defined)
            Greference: VascularGraph from which the initial RBC distribution is
                        to be taken. (If set to None, RBCs will be distributed
                        randomly, respecting the ht0 value supplied) The indices od edges
-		       and vertices as well as the direction must exactly the same. Otherwise
-		       there will be differences in the positions of RBCs
+                       and vertices as well as the direction must exactly the same. Otherwise
+                       there will be differences in the positions of RBCs
            plotPrms: plot parameters of RBC position plots (start, stop, step,
                      overwrite)
            samplePrms: sample parameters (start, stop, step, overwrite)
@@ -117,7 +117,7 @@ def split_and_steady_state_noRBCs(G='G_standard',edges=[3],fdilation=[1.0],cf=0.
     vessels.
     WARNING: For newly added edges the source is always the smaller
              vertex index and the target the higher vertex index. This needs to
-	     be considered in post-processing (e.g. flow direction, position of RBCs)
+             be considered in post-processing (e.g. flow direction, position of RBCs)
     INPUT: G: Input Graph as pkl-file (name without the ending .pkl)
            edges: list of edges which are dilated
            fdilation: list of factors by which the edge diameter is changed
@@ -155,20 +155,20 @@ def transient_dilation(G='G_standard',edges=[240, 243, 246, 249],
     in several steps. Note that there are some hard-coded variables which need to be
     adjusted if use-case changes!
     INPUT: G: Input Graph as pkl-file (name without the ending .pkl) 
-	   edges: List of edges to dilate
+           edges: List of edges to dilate
            fdilation: List of dilation-factors
            ttotal: total time
            ht0: initial tube hematocrit value throughout the VascularGraph
            ttransient: [tinitial, tduration, steps]= [start of the dilation, 
-			time period till dilation is finished, number of steps
-			for dilation]
+                        time period till dilation is finished, number of steps
+                        for dilation]
            plotstep: timestep for plotting
-	   samplestep: timestep for sampling
+           samplestep: timestep for sampling
            **kwargs:
                httBC: tube hematocrit boundary condition at inflow
-	       bigger: 0 = 2 Vessel network, 1= 2in2 Vessel network 2=Honeycomb
-	       wholeBr: Boolean whether the whole Branch is dilated (TRUE) or only
-		center of the Branch is dilated (FALSE)
+               bigger: 0 = 2 Vessel network, 1= 2in2 Vessel network 2=Honeycomb
+               wholeBr: Boolean whether the whole Branch is dilated (TRUE) or only
+                center of the Branch is dilated (FALSE)
     OUTPUT: None, pre- and post-dilation VascularGraph, sample-dictionary, and
             RBC-plots are written to disk.
     """
@@ -189,7 +189,7 @@ def transient_dilation(G='G_standard',edges=[240, 243, 246, 249],
     if kwargs.has_key('wholeBr'):
         wholeBr=kwargs['wholeBr']
     else:
-	wholeBr=False
+        wholeBr=False
 
 
     G.add_points(1.)
@@ -206,7 +206,7 @@ def transient_dilation(G='G_standard',edges=[240, 243, 246, 249],
             dfactor = G.es[eindex]['dfactor']
             vi, ei, dilated_ei = G.central_dilation(eindex, dfactor, 4/5.)
             G.es[ei]['dfactor'] = [None for e in ei]
-   	    dilatedList.append(dilated_ei)
+            dilatedList.append(dilated_ei)
         for i in range(len(dilatedList)):
             dilatedList[i]=dilatedList[i]-(len(dilatedList)-i-1)
     
@@ -232,10 +232,10 @@ def transient_dilation(G='G_standard',edges=[240, 243, 246, 249],
             Gd.es[edge]['diameter'] += fstep
             stdout.write("\rEdge = %g \n" %edge)
             stdout.write("\rDiameter = %f \n" %Gd.es[edge]['diameter'])
-	#START: Consider Change of minDist during dilation of vessel
+        #START: Consider Change of minDist during dilation of vessel
         LSd._update_minDist_and_nMax(esequence=dilatedList)
-	LSd._update_tube_hematocrit(esequence=dilatedList)
-	#END: Consider Change of minDist during dilation of vessel
+        LSd._update_tube_hematocrit(esequence=dilatedList)
+        #END: Consider Change of minDist during dilation of vessel
         LSd._update_nominal_and_specific_resistance(esequence=dilatedList)
         LSd._update_eff_resistance_and_LS()
         LSd.evolve(time=tstep, method='direct',

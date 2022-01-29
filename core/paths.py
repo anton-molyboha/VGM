@@ -1,17 +1,19 @@
 from __future__ import division
 
-import g_output
+from . import g_output
 import pylab as pl
 import vgm
 import numpy as np
 from sys import stdout
 import time as ttime
+import logging
 
     
 __all__ = ['all_paths_between_two_vertices', 'all_paths_of_given_length',
            'shortest_path_between_two_vertices', 'paths_to_subgraph',
            'path_between_a_and_v_for_vertexList']
-log = vgm.LogDispatcher.create_logger(__name__)
+# log = vgm.LogDispatcher.create_logger(__name__)
+log = logging.getLogger()
            
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------

@@ -19,18 +19,20 @@ from copy import deepcopy
 from pyamg import ruge_stuben_solver, smoothed_aggregation_solver
 from scipy import finfo, ones, zeros
 from scipy.sparse import lil_matrix, linalg
-from physiology import Physiology
+from .physiology import Physiology
 from scipy.integrate import quad
 from scipy.optimize import root
-import units
-import g_output
-import vascularGraph
+from . import units
+from . import g_output
+from . import vascularGraph
 import pdb
 import time as ttime
 import vgm
+import logging
 
 __all__ = ['LinearSystemHtd']
-log = vgm.LogDispatcher.create_logger(__name__)
+# log = vgm.LogDispatcher.create_logger(__name__)
+log = logging.getLogger()
 
 #------------------------------------------------------------------------------
 #------------------------------------------------------------------------------
@@ -88,11 +90,11 @@ class LinearSystemHtd(object):
         self._filenamelist = []
         self._timelist = []
         self._filenamelistAvg = []
-	self._timelistAvg = []
+        self._timelistAvg = []
         self._sampledict = {} 
         self._RBCdict= {}
         self._RBCindexCurrent=0
-	self._init=init
+        self._init=init
         self._scaleToDef=vgm.units.scaling_factor_du('mmHg',G['defaultUnits'])
         self._newRBCs=[]
 
@@ -118,11 +120,11 @@ class LinearSystemHtd(object):
         else:
             self._vf_Teta = 0
         # Set initial pressure and flow to zero:
-	if init:
+        if init:
           G.vs['pressure']=zeros(nVertices)                                                                                    
           G.es['flow']=zeros(G.ecount())    
 
-	#Calculate volume of individual vessel and total network Volume
+        #Calculate volume of individual vessel and total network Volume
         G.es['volume']=[0.25*np.pi*e['diameter']**2*e['length'] for e in G.es]
         G['V']=sum(G.es['volume']) 
 
@@ -170,7 +172,7 @@ class LinearSystemHtd(object):
         httBC_edges = G.es(httBC_ne=None).indices
 
         # Assign initial RBC positions:
-	if init:
+        if init:
             if kwargs.has_key('hd0'):
                 hd0=kwargs['hd0']
                 if hd0 == 'current':
@@ -194,7 +196,7 @@ class LinearSystemHtd(object):
 
         if pTracking:
             for e in G.es:
-	        e['RBCindex'] = np.array([])
+                e['RBCindex'] = np.array([])
                     
         if kwargs.has_key('plasmaViscosity'):
             self._muPlasma = kwargs['plasmaViscosity']
@@ -239,9 +241,9 @@ class LinearSystemHtd(object):
             G.es[i]['logNormal']=[logNormalMu,logNormalSigma]
 
 
-	#Calculate an estimated network turnover time (based on conditions at the beginning)
+        #Calculate an estimated network turnover time (based on conditions at the beginning)
         flowsum=0
-	for vi in G['av']:
+        for vi in G['av']:
             for ei in G.adjacent(vi):
                 flowsum=flowsum+G.es['flow'][ei]
         G['Ttau']=G['V']/flowsum
@@ -324,13 +326,13 @@ class LinearSystemHtd(object):
         es['resistance'] = [l * sr for l, sr in zip(es['length'], 
                                                 es['specificResistance'])]
 
-	self._G = G
+        self._G = G
 
     #--------------------------------------------------------------------------
 
     def _update_minDist_and_nMax(self, esequence=None):
         """Updates the length of the RBCs for each edge and the maximal Number
-		of RBCs for each edge
+                of RBCs for each edge
         INPUT: es: Sequence of edge indices as tuple. If not provided, all 
                    edges are updated.
         OUTPUT: None, the edge properties 'nMax' and 'minDist'
@@ -348,7 +350,7 @@ class LinearSystemHtd(object):
         es['minDist'] = [vrbc / (np.pi * (d-2*eslThickness(d))**2 / 4) for d in es['diameter']]
         es['nMax'] = [e['length']/ e['minDist'] for e in es] 
 
-	self._G=G
+        self._G=G
 
     #--------------------------------------------------------------------------
 
@@ -368,7 +370,7 @@ class LinearSystemHtd(object):
 
         es['htt'] = [min(len(e['rRBC']) * vrbc / e['volume'],1) for e in es]
 
-	self._G=G
+        self._G=G
 
     #--------------------------------------------------------------------------
 
@@ -728,7 +730,7 @@ class LinearSystemHtd(object):
 
         self._A = A
         self._b = b
-	self._G = G
+        self._G = G
 
     #--------------------------------------------------------------------------
 
@@ -763,7 +765,7 @@ class LinearSystemHtd(object):
                     e['rRBC'] = e['rRBC'] + displacement * e['sign']
                 if e['httBC'] is not None:
                     rRBC = []
-		    RBCindex = []
+                    RBCindex = []
                     #newRBCs =[]
                     lrbc = e['minDist']
                     htt = e['httBC']
@@ -830,7 +832,7 @@ class LinearSystemHtd(object):
                     if e['sign'] == 1:
                         e['rRBC'] = np.concatenate([rRBC[::-1], e['rRBC']])
                         if pTracking:
-		            e['RBCindex'] = np.concatenate([RBCindex[::-1], e['RBCindex']])
+                            e['RBCindex'] = np.concatenate([RBCindex[::-1], e['RBCindex']])
                     else:
                         e['rRBC'] = np.concatenate([e['rRBC'], length-rRBC])
                         if pTracking:
@@ -881,22 +883,22 @@ class LinearSystemHtd(object):
             e = outEdge
             if e.source == vi:
                 e['rRBC'] = np.concatenate([[0.0 + self._eps], e['rRBC']])
-		#Move 'RBCindex' value with RBC to new edge
+                #Move 'RBCindex' value with RBC to new edge
                 if pTracking:
                     if len(G.es[eiIn]['RBCindex']) > 0 and (len(G.es[eiIn]['rRBC']) == len(G.es[eiIn]['RBCindex'])):
-		        if G.es[eiIn]['sign'] == 1:		
+                        if G.es[eiIn]['sign'] == 1:                
                             e['RBCindex']=np.concatenate((G.es[eiIn]['RBCindex'][-1::],e['RBCindex']))
-		        else:
+                        else:
                             e['RBCindex']=np.concatenate((G.es[eiIn]['RBCindex'][0:1],e['RBCindex']))
             else:
                 e['rRBC'] = np.concatenate([e['rRBC'], [e['length'] - self._eps]])
-		#Move 'RBCindex' value with RBC to new edge
+                #Move 'RBCindex' value with RBC to new edge
                 if pTracking:
                     if len(G.es[eiIn]['RBCindex']) > 0 and (len(G.es[eiIn]['rRBC']) == len(G.es[eiIn]['RBCindex'])):
-		        if G.es[eiIn]['sign'] == 1:
+                        if G.es[eiIn]['sign'] == 1:
                             e['RBCindex']=np.concatenate((e['RBCindex'],G.es[eiIn]['RBCindex'][-1::]))
-		        else:
-		            e['RBCindex']=np.concatenate((e['RBCindex'],G.es[eiIn]['RBCindex'][0:1]))	
+                        else:
+                            e['RBCindex']=np.concatenate((e['RBCindex'],G.es[eiIn]['RBCindex'][0:1]))        
             self._update_tube_hematocrit((outEdge.index))
 
         # Remove RBC from mother vessel and save transit time of RBCs
@@ -907,7 +909,7 @@ class LinearSystemHtd(object):
             e = G.es[eiIn]
             if e['sign'] == 1:
                 if pTracking:
-		    if len(e['RBCindex']) > 0 and (len(e['rRBC']) == len(e['RBCindex'])):
+                    if len(e['RBCindex']) > 0 and (len(e['rRBC']) == len(e['RBCindex'])):
                         e['RBCindex']=e['RBCindex'][:-1]
                 e['rRBC'] = e['rRBC'][:-1]
             else:
@@ -919,15 +921,15 @@ class LinearSystemHtd(object):
 
         G.es['nRBC'] = [len(e['rRBC']) for e in G.es]
 
-	self._blockedEdges = blockedEdges
+        self._blockedEdges = blockedEdges
 
     #--------------------------------------------------------------------------
     #@profile
     def evolve(self, time, method, **kwargs):
         """Solves the linear system A x = b using a direct or AMG solver.
         INPUT: time: The duration for which the flow should be evolved. In case of
-	 	     Reset in plotPrms or samplePrms = False, time is the duration 
-	 	     which is added
+                      Reset in plotPrms or samplePrms = False, time is the duration 
+                      which is added
                method: Solution-method for solving the linear system. This can
                        be either 'direct' or 'iterative'
                **kwargs
@@ -940,7 +942,7 @@ class LinearSystemHtd(object):
                          'reset' is a boolean which determines if the current 
                          RBC evolution should be added to the existing history
                          or started anew. In case of Reset=False, start and stop
-			 are added to the already elapsed time.
+                         are added to the already elapsed time.
                samplePrms: Provides the parameters for sampling, i.e. writing 
                            a series of data-snapshots to disk for later 
                            analysis. List format with the following content is
@@ -950,7 +952,7 @@ class LinearSystemHtd(object):
                            should be set up. In case of Reset=False, start and stop
                           are added to the already elapsed time.
                SampleDetailed:Boolean whether every step should be samplede(True) or
-			      if the sampling is done by the given samplePrms(False)
+                              if the sampling is done by the given samplePrms(False)
                pTracking:Boolean whether RBC tracking output should be written
                BackUp: Boolean whether BackUps s
          OUTPUT: None (files are written to disk)
@@ -960,8 +962,8 @@ class LinearSystemHtd(object):
         tSample = self._tSample # deepcopy, since type is float
         filenamelist = self._filenamelist
         timelist = self._timelist
-	filenamelistAvg = self._filenamelistAvg
-	timelistAvg = self._timelistAvg
+        filenamelistAvg = self._filenamelistAvg
+        timelistAvg = self._timelistAvg
         self._initRBCdict = 1 
         self._newRBCs = []
 
@@ -1164,12 +1166,12 @@ class LinearSystemHtd(object):
                     #index = int(round(npoints * rRBC / length))
                     r.append(rsource + dvec * rRBC/length)
 
-	if len(r) > 0:
+        if len(r) > 0:
             pgraph.add_vertices(len(r))
             pgraph.vs['r'] = r
             g_output.write_vtp(pgraph, filename, False)
         else:
-	    print('Network is empty - no plotting')
+            print('Network is empty - no plotting')
 
     #--------------------------------------------------------------------------
     
@@ -1197,7 +1199,7 @@ class LinearSystemHtd(object):
         G.es['rbcFlow'] = [e['flow'] * e['htd'] for e in G.es]
         G.es['plasmaFlow'] = [e['flow'] - e['rbcFlow'] for e in G.es]
         G.es['nRBC'] = [len(e['rRBC']) for e in G.es]
-	G.es['lpg']=np.array(G.es['specificResistance']) * np.array(G.es['flow'])
+        G.es['lpg']=np.array(G.es['specificResistance']) * np.array(G.es['flow'])
         
         for eprop in ['flow', 'v', 'htt', 'htd', 'effResistance', 
                       'rbcFlow', 'plasmaFlow', 'nRBC','lpg']:

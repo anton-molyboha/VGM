@@ -5,10 +5,12 @@ import vgm
 import numpy as np
 import matplotlib.pyplot as plt
 from copy import deepcopy
+import logging
 
 __all__ = ['rescale_cdd', 'correct_for_shrinkage', 'scale_to_volume_fraction',
            'scale_to_mean_capillary_diameter']
-log = vgm.LogDispatcher.create_logger(__name__)
+# log = vgm.LogDispatcher.create_logger(__name__)
+log = logging.getLogger()
 
 #------------------------------------------------------------------------------
 #------------------------------------------------------------------------------

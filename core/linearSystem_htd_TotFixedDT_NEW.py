@@ -22,18 +22,20 @@ from scipy import finfo, ones, zeros
 from scipy.sparse import lil_matrix, linalg
 from scipy.integrate import quad
 from scipy.optimize import root
-from physiology import Physiology
+from .physiology import Physiology
 from scipy.sparse.linalg import gmres
-import units
-import g_output
-import vascularGraph
+from . import units
+from . import g_output
+from . import vascularGraph
 import pdb
-import run_faster
+from . import run_faster
 import time as ttime
 import vgm
+import logging
 
 __all__ = ['LinearSystemHtdTotFixedDT_NEW']
-log = vgm.LogDispatcher.create_logger(__name__)
+# log = vgm.LogDispatcher.create_logger(__name__)
+log = logging.getLogger()
 
 #------------------------------------------------------------------------------
 #------------------------------------------------------------------------------
@@ -84,7 +86,7 @@ class LinearSystemHtdTotFixedDT_NEW(object):
         self._tSample = 0.0
         self._filenamelist = []
         self._timelist = []
-    	self._timelistAvg = []
+        self._timelistAvg = []
         self._sampledict = {} 
         self._init = init
         self._scaleToDef = vgm.units.scaling_factor_du('mmHg',G['defaultUnits'])
@@ -401,7 +403,7 @@ class LinearSystemHtdTotFixedDT_NEW(object):
         es['htt'] = [min(e['nRBC'] * vrbc / e['volume'],1) for e in es]
         es['htd'] = [min(htt2htd(e['htt'], e['diameter'], invivo), 1.0) for e in es]
 
-    	self._G = G
+        self._G = G
 
     #--------------------------------------------------------------------------
 
@@ -547,7 +549,7 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                         print(vI)
                         G.vs[vI]['av'] = 1
                         G.vs[vI]['vv'] = 0
-			G.vs[vI]['vType'] = 1
+                        G.vs[vI]['vType'] = 1
                         edgeVI = G.adjacent(vI)[0]
                         G.es[edgeVI]['httBC'] = G.es[edgeVI]['httBC_init']
                         if len(G.es[edgeVI]['rRBC']) > 0:
@@ -2231,8 +2233,8 @@ class LinearSystemHtdTotFixedDT_NEW(object):
     def evolve(self, time, method, dtfix,**kwargs):
         """Solves the linear system A x = b using a direct or AMG solver.
         INPUT: time: The duration for which the flow should be evolved. In case of
-	 	     Reset in plotPrms or samplePrms = False, time is the duration 
-	 	     which is added
+                      Reset in plotPrms or samplePrms = False, time is the duration 
+                      which is added
                method: Solution-method for solving the linear system. This can
                        be either 'direct' or 'iterative'
                dtfix: given timestep
@@ -2246,7 +2248,7 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                          'reset' is a boolean which determines if the current 
                          RBC evolution should be added to the existing history
                          or started anew. In case of Reset=False, start and stop
-			 are added to the already elapsed time.
+                         are added to the already elapsed time.
                samplePrms: Provides the parameters for sampling, i.e. writing 
                            a series of data-snapshots to disk for later 
                            analysis. List format with the following content is
@@ -2256,7 +2258,7 @@ class LinearSystemHtdTotFixedDT_NEW(object):
                            should be set up. In case of Reset=False, start and stop
                           are added to the already elapsed time.
                SampleDetailed:Boolean whether every step should be samplede(True) or
-			      if the sampling is done by the given samplePrms(False)
+                              if the sampling is done by the given samplePrms(False)
          OUTPUT: None (files are written to disk)
         """
         G = self._G
@@ -2538,7 +2540,7 @@ class LinearSystemHtdTotFixedDT_NEW(object):
             pgraph.vs['r'] = r
             g_output.write_vtp(pgraph, filename, False)
         else:
-	    print('Network is empty - no plotting')
+            print('Network is empty - no plotting')
 
     #--------------------------------------------------------------------------
     

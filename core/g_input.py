@@ -1,6 +1,6 @@
 from __future__ import division, with_statement
 
-import cPickle
+import pickle
 import csv
 from operator import itemgetter
 import numpy as np
@@ -8,12 +8,14 @@ import scipy as sp
 
 #import guiTools
 import units
-from vascularGraph import VascularGraph
+from .vascularGraph import VascularGraph
+import logging
 import vgm
 
 __all__ = ['read_csv', 'read_amira_spatialGraph', 'read_amira_spatialGraph_v2',
            'read_pkl', 'read_landmarks']
-log = vgm.LogDispatcher.create_logger(__name__)
+# log = vgm.LogDispatcher.create_logger(__name__)
+log = logging.getLogger()
 
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
@@ -401,7 +403,7 @@ def read_pkl(filename=None):
     #    filename = guiTools.uigetfile('Select pickle file')
 
     with open(filename,'rb') as f:
-        G = cPickle.load(f)
+        G = pickle.load(f)
 
     return G    
 

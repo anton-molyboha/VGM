@@ -8,9 +8,11 @@ from scipy.special import erf
 from vgm import g_math
 import operator
 import vgm
+import logging
 
 __all__ = ['reconnect_cf', 'reconnect_tr']
-log = vgm.LogDispatcher.create_logger(__name__)
+# log = vgm.LogDispatcher.create_logger(__name__)
+log = logging.getLogger()
 
 
 #------------------------------------------------------------------------------

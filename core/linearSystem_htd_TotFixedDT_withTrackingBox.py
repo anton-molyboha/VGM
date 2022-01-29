@@ -22,18 +22,20 @@ from scipy import finfo, ones, zeros
 from scipy.sparse import lil_matrix, linalg
 from scipy.integrate import quad
 from scipy.optimize import root
-from physiology import Physiology
+from .physiology import Physiology
 from scipy.sparse.linalg import gmres
-import units
-import g_output
-import vascularGraph
+from . import units
+from . import g_output
+from . import vascularGraph
 import pdb
-import run_faster
+from . import run_faster
 import time as ttime
 import vgm
+import logging
 
 __all__ = ['LinearSystemHtdTotFixedDTTrackBox']
-log = vgm.LogDispatcher.create_logger(__name__)
+# log = vgm.LogDispatcher.create_logger(__name__)
+log = logging.getLogger()
 
 #------------------------------------------------------------------------------
 #------------------------------------------------------------------------------
@@ -91,10 +93,10 @@ class LinearSystemHtdTotFixedDTTrackBox(object):
         self._filenamelist = []
         self._timelist = []
         #self._filenamelistAvg = []
-	self._timelistAvg = []
+        self._timelistAvg = []
         self._sampledict = {} 
-	#self._transitTimeDict = {}
-	self._init=init
+        #self._transitTimeDict = {}
+        self._init=init
         self._scaleToDef=vgm.units.scaling_factor_du('mmHg',G['defaultUnits'])
         self._dtFix=0.0
         self._vertexUpdate=None
@@ -155,7 +157,7 @@ class LinearSystemHtdTotFixedDTTrackBox(object):
                 del(G['edgesMovedRBCs'])
 
         # Set initial pressure and flow to zero:
-	if init:
+        if init:
             G.vs['pressure']=zeros(nVertices) 
             G.es['flow']=zeros(G.ecount())    
             G.vs['degree']=G.degree()
@@ -228,7 +230,7 @@ class LinearSystemHtdTotFixedDTTrackBox(object):
         G.es[httBC_edges]['httBC_init']=G.es[httBC_edges]['httBC']
 
         # Assign initial RBC positions:
-	if init:
+        if init:
             if kwargs.has_key('hd0'):
                 hd0=kwargs['hd0']
                 if hd0 == 'current':
@@ -250,7 +252,7 @@ class LinearSystemHtdTotFixedDTTrackBox(object):
                     indices = sorted(np.random.permutation(Nmax)[:N])
                     e['rRBC'] = np.array(indices) * lrbc + lrbc / 2.0
                     #e['tRBC'] = np.array([])
-        	    #e['path'] = np.array([])
+                    #e['path'] = np.array([])
         print('Initial nRBC computed')    
         G.es['nRBC']=[len(e['rRBC']) for e in G.es]
         for i in self._allEdgesBox:
@@ -316,10 +318,10 @@ class LinearSystemHtdTotFixedDTTrackBox(object):
         print('Initiallize posFirst_last')
         self._update_out_and_inflows_for_vertices()
         print('updated out and inflows')
-	
+        
         #Calculate an estimated network turnover time (based on conditions at the beginning)
         flowsum=0
-	for vi in G['av']:
+        for vi in G['av']:
             for ei in G.adjacent(vi):
                 flowsum=flowsum+G.es['flow'][ei]
         G['flowSumIn']=flowsum
@@ -406,13 +408,13 @@ class LinearSystemHtdTotFixedDTTrackBox(object):
         es['resistance'] = [l * sr for l, sr in zip(es['length'], 
                                                 es['specificResistance'])]
 
-	self._G = G
+        self._G = G
 
     #--------------------------------------------------------------------------
 
     def _update_minDist_and_nMax(self, esequence=None):
         """Updates the length of the RBCs for each edge and the maximal Number
-		of RBCs for each edge
+                of RBCs for each edge
         INPUT: es: Sequence of edge indices as tuple. If not provided, all 
                    edges are updated.
         OUTPUT: None, the edge properties 'nMax' and 'minDist'
@@ -430,7 +432,7 @@ class LinearSystemHtdTotFixedDTTrackBox(object):
                         for e in G.es]
         G.es['minDist'] = [e['length'] / e['nMax'] for e in G.es]
 
-	self._G=G
+        self._G=G
 
     #--------------------------------------------------------------------------
 
@@ -451,7 +453,7 @@ class LinearSystemHtdTotFixedDTTrackBox(object):
         for e in es:
             G.es[int(e)]['htt'] = G.es[int(e)]['nRBC'] * G.es[int(e)]['minDist'] / G.es[int(e)]['length']
             G.es[int(e)]['htd']=min(htt2htd(G.es[int(e)]['htt'], G.es[int(e)]['diameter'], invivo), 0.95)
-	self._G=G
+        self._G=G
 
     #--------------------------------------------------------------------------
 
@@ -965,7 +967,7 @@ class LinearSystemHtdTotFixedDTTrackBox(object):
         G = self._G
         dt = self._dt # Time to propagate RBCs with current velocity.
         eps=self._eps
-	#No flow Edges are not considered for the propagation of RBCs
+        #No flow Edges are not considered for the propagation of RBCs
         edgeList0=G.es(noFlow_eq=0).indices
         if self._analyzeBifEvents:
             rbcsMovedPerEdge=[]
@@ -1132,7 +1134,7 @@ class LinearSystemHtdTotFixedDTTrackBox(object):
                         outE=G.vs[vi]['outflowE'][0]
                         oe=G.es[outE]
                         #Calculate possible number of bifurcation Events
-			#distToFirst = distance to first vertex in vessel
+                        #distToFirst = distance to first vertex in vessel
                         if len(oe['rRBC']) > 0:
                             distToFirst=oe['rRBC'][0] if oe['sign'] == 1.0 else oe['length']-oe['rRBC'][-1]
                         else:
@@ -1140,7 +1142,7 @@ class LinearSystemHtdTotFixedDTTrackBox(object):
                         #Check how many RBCs fit into the new Vessel
                         posNoBifEvents=int(np.floor(distToFirst/oe['minDist']))
                         #Check how many RBCs are allowed by nMax --> limitation results from np.floor(length/minDist) 
-			#and that RBCs are only 'half' in the vessel 
+                        #and that RBCs are only 'half' in the vessel 
                         if posNoBifEvents + len(oe['rRBC']) > oe['nMax']:
                             posNoBifEvents = int(oe['nMax'] - len(oe['rRBC']))
                         #OvershootsNo: compare posNoBifEvents with noBifEvents
@@ -1157,7 +1159,7 @@ class LinearSystemHtdTotFixedDTTrackBox(object):
                             overshootsNo=posNoBifEvents
                         if overshootsNo > 0:
                             #overshootsDist --> array with the distances which the RBCs overshoot, 
-			    #starts wiht the RBC which overshoots the least 
+                            #starts wiht the RBC which overshoots the least 
                             overshootDist=[e['rRBC'][posBifRBCsIndex]-[e['length']]*overshootsNo if sign == 1.0
                                 else [0]*overshootsNo-e['rRBC'][posBifRBCsIndex]][0]
                             if sign != 1.0:
@@ -1172,7 +1174,7 @@ class LinearSystemHtdTotFixedDTTrackBox(object):
                                     position = np.array(position)-np.array([position[-1]-oe['length']]*len(position))
                             #Maxmimum number of overshoots possible is infact limited by the overshootDistance of the first RBC
                             #If the RBCs travel with the same speed than the bulk flow this check is not necessary
-			    #BUT due to different velocity factors RBCs cann "ran into each other" at connecting bifurcations
+                            #BUT due to different velocity factors RBCs cann "ran into each other" at connecting bifurcations
                             overshootsNoReduce=0
                             #Check if RBCs ran into another
                             for i in range(overshootsNo-1):
@@ -1410,7 +1412,7 @@ class LinearSystemHtdTotFixedDTTrackBox(object):
                             overshootTime=overshootDist / ([e['v']]*overshootsNo)
                             #Calculate position of overshootRBCs in every outEdge
                             #the values in position are stored such that they can directly concatenated with outE['rRBC']
-			    #flow direction of outEdge is considered
+                            #flow direction of outEdge is considered
                             #position = [pos_min ... pos_max]
                             if oe['sign'] == 1.0:
                                 position1=np.array(overshootTime)*np.array([oe['v']]*overshootsNo)
@@ -1826,7 +1828,7 @@ class LinearSystemHtdTotFixedDTTrackBox(object):
                                                     counterPref2.append(index)
                                                     countPref2 += 1
                                             #There is no space in the second outEdge
-					    #Check if there is a third outEdge
+                                            #Check if there is a third outEdge
                                             else:
                                                 if len(outEdges)>2:
                                                     #check if RBC still fits into outEPref3
@@ -2990,7 +2992,7 @@ class LinearSystemHtdTotFixedDTTrackBox(object):
                                     print(RBCindex)
                                 else:
                                     edgesBoxBool=0
-			    #Add RBCs
+                            #Add RBCs
                             if oe['sign'] == 1.0:
                                 oe['rRBC']=np.concatenate([position, oe['rRBC']])
                                 if edgesBoxBool:
@@ -3371,8 +3373,8 @@ class LinearSystemHtdTotFixedDTTrackBox(object):
                             countPref2=0
                             pref1Full = 0
                             pref2Full = 0
-		            count1 = 0
-		            count2 = 0
+                            count1 = 0
+                            count2 = 0
                             #Loop over all movable RBCs
                             for i in range(overshootsNo):
                                 index=-1*(i+1)
@@ -4067,8 +4069,8 @@ class LinearSystemHtdTotFixedDTTrackBox(object):
     def evolve(self, time, method, dtfix,**kwargs):
         """Solves the linear system A x = b using a direct or AMG solver.
         INPUT: time: The duration for which the flow should be evolved. In case of
-	 	     Reset in plotPrms or samplePrms = False, time is the duration 
-	 	     which is added
+                      Reset in plotPrms or samplePrms = False, time is the duration 
+                      which is added
                method: Solution-method for solving the linear system. This can
                        be either 'direct' or 'iterative'
                dtfix: given timestep
@@ -4082,7 +4084,7 @@ class LinearSystemHtdTotFixedDTTrackBox(object):
                          'reset' is a boolean which determines if the current 
                          RBC evolution should be added to the existing history
                          or started anew. In case of Reset=False, start and stop
-			 are added to the already elapsed time.
+                         are added to the already elapsed time.
                samplePrms: Provides the parameters for sampling, i.e. writing 
                            a series of data-snapshots to disk for later 
                            analysis. List format with the following content is
@@ -4092,7 +4094,7 @@ class LinearSystemHtdTotFixedDTTrackBox(object):
                            should be set up. In case of Reset=False, start and stop
                           are added to the already elapsed time.
                SampleDetailed:Boolean whether every step should be samplede(True) or
-			      if the sampling is done by the given samplePrms(False)
+                              if the sampling is done by the given samplePrms(False)
          OUTPUT: None (files are written to disk)
         """
         G=self._G
@@ -4101,8 +4103,8 @@ class LinearSystemHtdTotFixedDTTrackBox(object):
         filenamelist = self._filenamelist
         self._dt=dtfix
         timelist = self._timelist
-	#filenamelistAvg = self._filenamelistAvg
-	timelistAvg = self._timelistAvg
+        #filenamelistAvg = self._filenamelistAvg
+        timelistAvg = self._timelistAvg
 
         if 'init' in kwargs.keys():
             init=kwargs['init']
@@ -4340,9 +4342,9 @@ class LinearSystemHtdTotFixedDTTrackBox(object):
             g_output.write_pkl(self._sampledict, 'sampledict.pkl')
             #COMMENTED
             #g_output.write_pkl(self._sampledict,filename1)
-	    #g_output.write_pkl(self._transitTimeDict, 'TransitTimeDict.pkl')
+            #g_output.write_pkl(self._transitTimeDict, 'TransitTimeDict.pkl')
             #g_output.write_pvd_time_series('sequenceSampling.pvd',
-	    #				   filenamelistAvg, timelistAvg)
+            #                                   filenamelistAvg, timelistAvg)
         #G['spacing']=self._spacing
         vgm.write_pkl(G, 'G_final.pkl')
         #COMMENTED
@@ -4356,8 +4358,8 @@ class LinearSystemHtdTotFixedDTTrackBox(object):
         #g_output.write_pkl(self, 'LSHTD.pkl')
         #self._timelist = timelist[:]
         #self._filenamelist = filenamelist[:]
-	#self._filenamelistAvg = filenamelistAvg[:]
-	#self._timelistAvg = timelistAvg[:]
+        #self._filenamelistAvg = filenamelistAvg[:]
+        #self._timelistAvg = timelistAvg[:]
 
     #--------------------------------------------------------------------------
 
@@ -4395,12 +4397,12 @@ class LinearSystemHtdTotFixedDTTrackBox(object):
                     #index = int(round(npoints * rRBC / length))
                     r.append(rsource + dvec * rRBC/length)
 
-	if len(r) > 0:
+        if len(r) > 0:
             pgraph.add_vertices(len(r))
             pgraph.vs['r'] = r
             g_output.write_vtp(pgraph, filename, False)
         else:
-	    print('Network is empty - no plotting')
+            print('Network is empty - no plotting')
 
     #--------------------------------------------------------------------------
     

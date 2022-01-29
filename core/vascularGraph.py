@@ -11,13 +11,16 @@ from scipy import finfo
 import scipy as sp
 from sys import stdout
 
-import g_math
-import units
-import misc
-import vgm
+from . import g_math
+from . import units
+from . import misc
+from . import vgm
+
+import logging
 
 __all__ = ['VascularGraph']
-log = vgm.LogDispatcher.create_logger(__name__)
+# log = vgm.LogDispatcher.create_logger(__name__)
+log = logging.getLogger()
 
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
@@ -985,7 +988,7 @@ class VascularGraph(Graph):
                     else:
                         self.es[newEdges[1]]['rRBC']=np.array(self.es[eIndex]['rRBC'][i::])-np.array([self.es[newEdges[0]]['length']]*len(self.es[eIndex]['rRBC'][i::]))
                 else:
-		    self.es[newEdges[0]]['rRBC']=[]
+                    self.es[newEdges[0]]['rRBC']=[]
                     self.es[newEdges[1]]['rRBC']=[]
                 self.es[newEdges[0]]['nRBC']=len(self.es[newEdges[0]]['rRBC'])
                 self.es[newEdges[1]]['nRBC']=len(self.es[newEdges[1]]['rRBC'])

@@ -23,18 +23,20 @@ from scipy import finfo, ones, zeros
 from scipy.sparse import lil_matrix, linalg
 from scipy.integrate import quad
 from scipy.optimize import root
-from physiology import Physiology
+from .physiology import Physiology
 from scipy.sparse.linalg import gmres
-import units
-import g_output
-import vascularGraph
+from . import units
+from . import g_output
+from . import vascularGraph
 import pdb
-import run_faster
+from . import run_faster
 import time as ttime
 import vgm
+import logging
 
 __all__ = ['LinearSystemHtdTotFixedDTnRBCint']
-log = vgm.LogDispatcher.create_logger(__name__)
+# log = vgm.LogDispatcher.create_logger(__name__)
+log = logging.getLogger()
 
 #------------------------------------------------------------------------------
 #------------------------------------------------------------------------------
@@ -97,10 +99,10 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
         self._filenamelist = []
         self._timelist = []
         #self._filenamelistAvg = []
-	self._timelistAvg = []
+        self._timelistAvg = []
         self._sampledict = {} 
-	#self._transitTimeDict = {}
-	self._init=init
+        #self._transitTimeDict = {}
+        self._init=init
         self._scaleToDef=vgm.units.scaling_factor_du('mmHg',G['defaultUnits'])
         self._dtFix=0.0
         self._vertexUpdate=None
@@ -164,7 +166,7 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
             if 'rbcMovedAll' in G.attributes():
                 del(G['edgesMovedRBCs'])
         # Set initial pressure and flow to zero:
-	if init:
+        if init:
             G.vs['pressure']=zeros(nVertices) 
             G.es['flow']=zeros(G.ecount())    
 
@@ -242,7 +244,7 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
                     G.es[G.adjacent(i)[0]]['httBC_init']=httBCValue
 
         # Assign initial RBC positions:
-	if init:
+        if init:
             if kwargs.has_key('hd0'):
                 hd0=kwargs['hd0']
                 if hd0 == 'current':
@@ -311,7 +313,7 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
         #print('updated out and inflows')
 
         eps=self._eps
-	if init:
+        if init:
             G.es['posFirst_last']=[None]*G.ecount()
             G.es['logNormal']=[None]*G.ecount()
             httBC_edges = G.es(httBC_ne=None)
@@ -333,72 +335,72 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
                 else:
                     LDValue=httBCValue*(e['diameter']/(e['diameter']-2*eslThickness(e['diameter'])))**2
                 logNormalMu,logNormalSigma=self._compute_mu_sigma_inlet_RBC_distribution(LDValue)
-	        #print('Initial nRBC computed')    
+                #print('Initial nRBC computed')    
                 e['logNormal']=[logNormalMu,logNormalSigma]
 
                 #prepare httBC edges 
-	        rRBC = []
-	        lrbc = e['minDist']
-	        htt = e['httBC']
-	        length = e['length']
-	        nMaxNew=e['nMax']-len(e['rRBC'])
-	        if len(e['rRBC']) > 0:
-	            posFirst=e['rRBC'][0] if e['sign']==1.0 else e['length']-e['rRBC'][-1]
-	            e['posFirst_last']=posFirst
-	            e['v_last'] = e['v']
-	            cum_length = posFirst
-	        else:
+                rRBC = []
+                lrbc = e['minDist']
+                htt = e['httBC']
+                length = e['length']
+                nMaxNew=e['nMax']-len(e['rRBC'])
+                if len(e['rRBC']) > 0:
+                    posFirst=e['rRBC'][0] if e['sign']==1.0 else e['length']-e['rRBC'][-1]
+                    e['posFirst_last']=posFirst
+                    e['v_last'] = e['v']
+                    cum_length = posFirst
+                else:
                     print('ERROR this should not happen')
-	            cum_length = e['posFirst_last']
-	            posFirst = cum_length
-	            e['posFirst_last']=posFirst
-	            #e['v_last']=e['v']
-	        while cum_length >= lrbc and nMaxNew > 0:
-	            if len(e['keep_rbcs']) != 0:
-	                if posFirst - e['keep_rbcs'][0] >= 0:
-		            if posFirst - e['keep_rbcs'][0] > e['length']:
-		    	        rRBC.append(e['length'])
-			        posFirst=e['length']
-			    else:
-			        rRBC.append(posFirst - e['keep_rbcs'][0])
-			        posFirst=posFirst - e['keep_rbcs'][0]
-			    nMaxNew += -1
-			    cum_length = posFirst
-			    e['keep_rbcs']=[]
-			    e['posFirst_last']=posFirst
-			    #e['v_last']=e['v']
-		        else:
-		            break
-		    else:
-		        #number of RBCs randomly chosen to average htt
-		        number=np.exp(e['logNormal'][0]+e['logNormal'][1]*np.random.randn(1)[0])
-		        #self._spacing.append(number)
-		        spacing = lrbc+lrbc*number
-		        if posFirst - spacing >= 0:
-		            if posFirst - spacing > e['length']:
-		    	        rRBC.append(e['length'])
-			        posFirst=e['length']
-			    else:
-			        rRBC.append(posFirst - spacing)
-			        posFirst=posFirst - spacing
-			    nMaxNew += -1
-			    cum_length = posFirst
-			    e['posFirst_last']=posFirst
-			    #e['v_last']=e['v']
-		        else:
-		            e['keep_rbcs']=[spacing]
-		            #e['v_last']=e['v']
-		            if len(rRBC) == 0:
-		                e['posFirst_last']=posFirst
-			    else:
-			        e['posFirst_last']=rRBC[-1]
-			    break
+                    cum_length = e['posFirst_last']
+                    posFirst = cum_length
+                    e['posFirst_last']=posFirst
+                    #e['v_last']=e['v']
+                while cum_length >= lrbc and nMaxNew > 0:
+                    if len(e['keep_rbcs']) != 0:
+                        if posFirst - e['keep_rbcs'][0] >= 0:
+                            if posFirst - e['keep_rbcs'][0] > e['length']:
+                                rRBC.append(e['length'])
+                                posFirst=e['length']
+                            else:
+                                rRBC.append(posFirst - e['keep_rbcs'][0])
+                                posFirst=posFirst - e['keep_rbcs'][0]
+                            nMaxNew += -1
+                            cum_length = posFirst
+                            e['keep_rbcs']=[]
+                            e['posFirst_last']=posFirst
+                            #e['v_last']=e['v']
+                        else:
+                            break
+                    else:
+                        #number of RBCs randomly chosen to average htt
+                        number=np.exp(e['logNormal'][0]+e['logNormal'][1]*np.random.randn(1)[0])
+                        #self._spacing.append(number)
+                        spacing = lrbc+lrbc*number
+                        if posFirst - spacing >= 0:
+                            if posFirst - spacing > e['length']:
+                                rRBC.append(e['length'])
+                                posFirst=e['length']
+                            else:
+                                rRBC.append(posFirst - spacing)
+                                posFirst=posFirst - spacing
+                            nMaxNew += -1
+                            cum_length = posFirst
+                            e['posFirst_last']=posFirst
+                            #e['v_last']=e['v']
+                        else:
+                            e['keep_rbcs']=[spacing]
+                            #e['v_last']=e['v']
+                            if len(rRBC) == 0:
+                                e['posFirst_last']=posFirst
+                            else:
+                                e['posFirst_last']=rRBC[-1]
+                            break
                 if len(e['keep_rbcs']) == 0:
-		    number=np.exp(e['logNormal'][0]+e['logNormal'][1]*np.random.randn(1)[0])
-		    spacing = lrbc+lrbc*number
-		    e['keep_rbcs']=[spacing]
-	        rRBC = np.array(rRBC)
-	        if len(rRBC) >= 1.:
+                    number=np.exp(e['logNormal'][0]+e['logNormal'][1]*np.random.randn(1)[0])
+                    spacing = lrbc+lrbc*number
+                    e['keep_rbcs']=[spacing]
+                rRBC = np.array(rRBC)
+                if len(rRBC) >= 1.:
                     if e['sign'] == 1:
                         e['rRBC'] = np.concatenate([rRBC[::-1], e['rRBC']])
                     else:
@@ -534,7 +536,7 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
         #Calculate an estimated network turnover time (based on conditions at the beginning)
         flowsum=0
 
-	for vi in G['av']:
+        for vi in G['av']:
             for ei in G.adjacent(vi):
                 flowsum=flowsum+G.es['flow'][ei]
         G['flowSumIn']=flowsum
@@ -628,7 +630,7 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
         es['resistance'] = [l * sr for l, sr in zip(es['length'], 
                                                 es['specificResistance'])]
 
-	self._G = G
+        self._G = G
 
     #--------------------------------------------------------------------------
 
@@ -651,7 +653,7 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
         es['htt'] = [min(e['nRBCint'] * vrbc / e['volume'],1) for e in es]
         es['htd']= [min(htt2htd(e['htt'], e['diameter'], invivo), 1.0) for e in es]
 
-	self._G=G
+        self._G=G
 
     #--------------------------------------------------------------------------
 
@@ -791,7 +793,7 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
                         #print(vI)
                         G.vs[vI]['av'] = 1
                         G.vs[vI]['vv'] = 0
-			G.vs[vI]['vType'] = 1
+                        G.vs[vI]['vType'] = 1
                         edgeVI=G.adjacent(vI)[0]
                         G.es[edgeVI]['httBC']=G.es[edgeVI]['httBC_init']
                         if len(G.es[edgeVI]['rRBC']) > 0:
@@ -1000,7 +1002,7 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
                             print(vI)
                             G.vs[vI]['av'] = 1
                             G.vs[vI]['vv'] = 0
-			    G.vs[vI]['vType'] = 1
+                            G.vs[vI]['vType'] = 1
                             edgeVI=G.adjacent(vI)[0]
                             G.es[edgeVI]['httBC']=G.es[edgeVI]['httBC_init']
                             if len(G.es[edgeVI]['rRBC']) > 0:
@@ -1038,7 +1040,7 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
                             #print(vI)
                             G.vs[vI]['av'] = 1
                             G.vs[vI]['vv'] = 0
-			    G.vs[vI]['vType'] = 1
+                            G.vs[vI]['vType'] = 1
                             edgeVI=G.adjacent(vI)[0]
                             G.es[edgeVI]['httBC']=G.es[edgeVI]['httBC_init']
                             if len(G.es[edgeVI]['rRBC']) > 0:
@@ -1225,7 +1227,7 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
             analyzeDivBifEvents=self._analyzeDivBifEvents
             upstreamDivBifsCount=self._upstreamDivBifsCount
             upstreamDivBifsNotDiv=self._upstreamDivBifsNotDiv
-	#No flow Edges are not considered for the propagation of RBCs
+        #No flow Edges are not considered for the propagation of RBCs
         edgeList0=G.es(noFlow_eq=0).indices
         if self._analyzeBifEvents:
             rbcsMovedPerEdge=[]
@@ -1329,7 +1331,7 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
                         outE=G.vs[vi]['outflowE'][0]
                         oe=G.es[outE]
                         #Calculate possible number of bifurcation Events
-			#distToFirst = distance to first vertex in vessel
+                        #distToFirst = distance to first vertex in vessel
                         if len(oe['rRBC']) > 0:
                             distToFirst=oe['rRBC'][0] if oe['sign'] == 1.0 else oe['length']-oe['rRBC'][-1]
                         else:
@@ -1337,7 +1339,7 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
                         #Check how many RBCs fit into the new Vessel
                         posNoBifEvents=int(np.floor(distToFirst/oe['minDist']))
                         #Check how many RBCs are allowed by nMax --> limitation results from np.floor(length/minDist) 
-			#and that RBCs are only 'half' in the vessel 
+                        #and that RBCs are only 'half' in the vessel 
                         if posNoBifEvents + len(oe['rRBC']) > oe['nMax']:
                             posNoBifEvents = int(oe['nMax'] - len(oe['rRBC']))
                         #OvershootsNo: compare posNoBifEvents with noBifEvents
@@ -1354,7 +1356,7 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
                             overshootsNo=posNoBifEvents
                         if overshootsNo > 0:
                             #overshootsDist --> array with the distances which the RBCs overshoot, 
-			    #starts wiht the RBC which overshoots the least 
+                            #starts wiht the RBC which overshoots the least 
                             overshootDist=[e['rRBC'][posBifRBCsIndex]-[e['length']]*overshootsNo if sign == 1.0
                                 else [0]*overshootsNo-e['rRBC'][posBifRBCsIndex]][0]
                             if sign != 1.0:
@@ -1369,7 +1371,7 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
                                     position = np.array(position)-np.array([position[-1]-oe['length']]*len(position))
                             #Maxmimum number of overshoots possible is infact limited by the overshootDistance of the first RBC
                             #If the RBCs travel with the same speed than the bulk flow this check is not necessary
-			    #BUT due to different velocity factors RBCs cann "ran into each other" at connecting bifurcations
+                            #BUT due to different velocity factors RBCs cann "ran into each other" at connecting bifurcations
                             overshootsNoReduce=0
                             #Check if RBCs ran into another
                             for i in range(overshootsNo-1):
@@ -1567,7 +1569,7 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
                             overshootTime=overshootDist / ([e['v']]*overshootsNo)
                             #Calculate position of overshootRBCs in every outEdge
                             #the values in position are stored such that they can directly concatenated with outE['rRBC']
-			    #flow direction of outEdge is considered
+                            #flow direction of outEdge is considered
                             #position = [pos_min ... pos_max]
                             if oe['sign'] == 1.0:
                                 position1=np.array(overshootTime)*np.array([oe['v']]*overshootsNo)
@@ -2455,7 +2457,7 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
                                                         counterPref2.append(index)
                                                         countPref2 += 1
                                                 #There is no space in the second outEdge
-					        #Check if there is a third outEdge
+                                                #Check if there is a third outEdge
                                                 else:
                                                     if len(outEdges)>2:
                                                         #check if RBC still fits into outEPref3
@@ -3452,8 +3454,8 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
                             if nonCap:
                                 countNo1=0
                                 countNo2=0
-		                count1 = 0
-		                count2 = 0
+                                count1 = 0
+                                count2 = 0
                                 inEPref1=[]
                                 inEPref2=[]
                                 indexPref1=[]
@@ -3736,8 +3738,8 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
                                 countPref2=0
                                 pref1Full = 0
                                 pref2Full = 0
-		                count1 = 0
-		                count2 = 0
+                                count1 = 0
+                                count2 = 0
                                 #Loop over all movable RBCs
                                 for i in range(overshootsNo):
                                     index=-1*(i+1)
@@ -4217,9 +4219,9 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
                                 e['posFirst_last']=rRBC[-1]
                             break
                 if len(e['keep_rbcs']) == 0:
-		    number=np.exp(e['logNormal'][0]+e['logNormal'][1]*np.random.randn(1)[0])
-		    spacing = lrbc+lrbc*number
-		    e['keep_rbcs']=[spacing]
+                    number=np.exp(e['logNormal'][0]+e['logNormal'][1]*np.random.randn(1)[0])
+                    spacing = lrbc+lrbc*number
+                    e['keep_rbcs']=[spacing]
                 rRBC = np.array(rRBC)
                 if len(rRBC) >= 1.:
                     if e['sign'] == 1:
@@ -4302,9 +4304,9 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
                                         e2['posFirst_last']=rRBC2[-1]
                                     break
                         if len(e2['keep_rbcs']) == 0:
-		            number=np.exp(e2['logNormal'][0]+e2['logNormal'][1]*np.random.randn(1)[0])
-		            spacing = lrbc+lrbc*number
-		            e2['keep_rbcs']=[spacing]
+                            number=np.exp(e2['logNormal'][0]+e2['logNormal'][1]*np.random.randn(1)[0])
+                            spacing = lrbc+lrbc*number
+                            e2['keep_rbcs']=[spacing]
                         rRBC2 = np.array(rRBC2)
                         if len(rRBC2) >= 1.:
                             if e2['sign'] == 1:
@@ -4386,9 +4388,9 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
                                             e3['posFirst_last']=rRBC3[-1]
                                         break
                             if len(e3['keep_rbcs']) == 0:
-		                number=np.exp(e3['logNormal'][0]+e3['logNormal'][1]*np.random.randn(1)[0])
-		                spacing = lrbc+lrbc*number
-		                e3['keep_rbcs']=[spacing]
+                                number=np.exp(e3['logNormal'][0]+e3['logNormal'][1]*np.random.randn(1)[0])
+                                spacing = lrbc+lrbc*number
+                                e3['keep_rbcs']=[spacing]
                             rRBC3 = np.array(rRBC3)
                             if len(rRBC3) >= 1.:
                                 if e3['sign'] == 1:
@@ -4613,8 +4615,8 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
     def evolve(self, time, method, dtfix,**kwargs):
         """Solves the linear system A x = b using a direct or AMG solver.
         INPUT: time: The duration for which the flow should be evolved. In case of
-	 	     Reset in plotPrms or samplePrms = False, time is the duration 
-	 	     which is added
+                      Reset in plotPrms or samplePrms = False, time is the duration 
+                      which is added
                method: Solution-method for solving the linear system. This can
                        be either 'direct' or 'iterative'
                dtfix: given timestep
@@ -4628,7 +4630,7 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
                          'reset' is a boolean which determines if the current 
                          RBC evolution should be added to the existing history
                          or started anew. In case of Reset=False, start and stop
-			 are added to the already elapsed time.
+                         are added to the already elapsed time.
                samplePrms: Provides the parameters for sampling, i.e. writing 
                            a series of data-snapshots to disk for later 
                            analysis. List format with the following content is
@@ -4638,7 +4640,7 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
                            should be set up. In case of Reset=False, start and stop
                           are added to the already elapsed time.
                SampleDetailed:Boolean whether every step should be samplede(True) or
-			      if the sampling is done by the given samplePrms(False)
+                              if the sampling is done by the given samplePrms(False)
          OUTPUT: None (files are written to disk)
         """
         G=self._G
@@ -4647,8 +4649,8 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
         filenamelist = self._filenamelist
         self._dt=dtfix
         timelist = self._timelist
-	#filenamelistAvg = self._filenamelistAvg
-	timelistAvg = self._timelistAvg
+        #filenamelistAvg = self._filenamelistAvg
+        timelistAvg = self._timelistAvg
 
         if 'init' in kwargs.keys():
             init=kwargs['init']
@@ -4926,9 +4928,9 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
             self._sample_average()
             g_output.write_pkl(self._sampledict, 'sampledict.pkl')
             g_output.write_pkl(self._sampledict,filename1)
-	    #g_output.write_pkl(self._transitTimeDict, 'TransitTimeDict.pkl')
+            #g_output.write_pkl(self._transitTimeDict, 'TransitTimeDict.pkl')
             #g_output.write_pvd_time_series('sequenceSampling.pvd',
-	    #				   filenamelistAvg, timelistAvg)
+            #                                   filenamelistAvg, timelistAvg)
         #G['spacing']=self._spacing
         vgm.write_pkl(G, 'G_final.pkl')
         vgm.write_pkl(G,filename2)
@@ -4938,8 +4940,8 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
         #g_output.write_pkl(self, 'LSHTD.pkl')
         #self._timelist = timelist[:]
         #self._filenamelist = filenamelist[:]
-	#self._filenamelistAvg = filenamelistAvg[:]
-	#self._timelistAvg = timelistAvg[:]
+        #self._filenamelistAvg = filenamelistAvg[:]
+        #self._timelistAvg = timelistAvg[:]
 
     #--------------------------------------------------------------------------
 
@@ -4977,12 +4979,12 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
                     #index = int(round(npoints * rRBC / length))
                     r.append(rsource + dvec * rRBC/length)
 
-	if len(r) > 0:
+        if len(r) > 0:
             pgraph.add_vertices(len(r))
             pgraph.vs['r'] = r
             g_output.write_vtp(pgraph, filename, False)
         else:
-	    print('Network is empty - no plotting')
+            print('Network is empty - no plotting')
 
     #--------------------------------------------------------------------------
     
@@ -5177,7 +5179,7 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
         """Computes the average contribution of one RBC leaving a vessel to the 
         tube hematocrit during one time step
         """
-	length=edge['length']
+        length=edge['length']
         vRBC=edge['v']
         lRBC=edge['minDist']
         if edge['sign'] == 1:
@@ -5204,7 +5206,7 @@ class LinearSystemHtdTotFixedDTnRBCint(object):
         """Computes the average contribution of one RBC just entering a vessel to the 
         tube hematocrit during one time step
         """
-	length=edge['length']
+        length=edge['length']
         vRBC=edge['v']
         lRBC=edge['minDist']
         if edge['sign'] == 1:

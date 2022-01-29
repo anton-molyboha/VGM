@@ -7,8 +7,8 @@ cdef extern from "math.h":
     double sqrt(double)
     double M_PI
 
-import g_math
-import units
+from . import g_math
+from . import units
 import numpy
 
 __all__ = ['Physiology']
