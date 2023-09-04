@@ -45,7 +45,7 @@ class LinearSystem(object):
         self._P = Physiology(G['defaultUnits'])
         self._muPlasma = self._P.dynamic_plasma_viscosity()
         #Check if a arbirtrary distribution of RBCs should be considered
-        if kwargs.has_key('withRBC'):
+        if 'withRBC' in kwargs:
             if kwargs['withRBC']!=0:
                 self._withRBC = kwargs['withRBC']
             else:
@@ -53,7 +53,7 @@ class LinearSystem(object):
         else:
             self._withRBC = 0
 
-        if kwargs.has_key('invivo'):
+        if 'invivo' in kwargs:
             if kwargs['invivo']!=0:
                 self._invivo = kwargs['invivo']
             else:
@@ -61,7 +61,7 @@ class LinearSystem(object):
         else:
             self._invivo = 0
 
-        if kwargs.has_key('resistanceLength'):
+        if 'resistanceLength' in kwargs:
             if kwargs['resistanceLength']==1:
                 self._resistanceLength = 1
                 print('Diameter not considered for calculation of resistance')
@@ -108,9 +108,9 @@ class LinearSystem(object):
             self._G = newGraph
             
         G = self._G
-        if not G.vs[0].attributes().has_key('pBC'):
+        if not 'pBC' in G.vs[0].attributes():
             G.vs[0]['pBC'] = None
-        if not G.vs[0].attributes().has_key('rBC'):
+        if not 'rBC' in G.vs[0].attributes():
             G.vs[0]['rBC'] = None        
 
         #Convert 'pBC' ['mmHG'] to default Units
@@ -156,7 +156,7 @@ class LinearSystem(object):
                 aDummy=0
                 k=0
                 neighbors=[]
-                for edge in G.adjacent(i,'all'):
+                for edge in G.incident(i,'all'):
                     if G.is_loop(edge):
                         continue
                     j=G.neighbors(i)[k]
@@ -206,11 +206,11 @@ class LinearSystem(object):
             linalg.use_solver(useUmfpack=True)
             x = linalg.spsolve(A, b)
         elif method == 'iterative':
-            if kwargs.has_key('precision'):
+            if 'precision' in kwargs:
                 eps = kwargs['precision']
             else:
                 eps = self._eps
-            if kwargs.has_key('maxiter'):
+            if 'maxiter' in kwargs:
                 maxiter = kwargs['maxiter']
             else:
                 maxiter = 250
@@ -259,7 +259,7 @@ class LinearSystem(object):
         G.vs[pBCneNone]['pBC']=np.array(G.vs[pBCneNone]['pBC'])*(1/vgm.units.scaling_factor_du('mmHg',G['defaultUnits']))
 
         vgm.write_pkl(G, 'G_final.pkl')
-        vgm.write_vtp(G, 'G_final.vtp',False)
+        vgm.write_vtp(G, b'G_final.vtp',False)
 
         #Write Output
         sampledict={}
@@ -284,7 +284,7 @@ class LinearSystem(object):
         G = self._G
         G.vs['flowSum'] = [sum([G.es[e]['flow'] * np.sign(G.vs[v]['pressure'] -
                                                     G.vs[n]['pressure'])
-                               for e, n in zip(G.adjacent(v), G.neighbors(v))])
+                               for e, n in zip(G.incident(v, "all"), G.neighbors(v))])
                            for v in xrange(G.vcount())]
         for i in range(G.vcount()):
             if G.vs[i]['flowSum'] > self._eps:
@@ -293,7 +293,7 @@ class LinearSystem(object):
                 print(G.vs['flowSum'][i])
                 #print(self._res[i])
                 print('ERROR')
-                for j in G.adjacent(i):
+                for j in G.incident(i, "all"):
                     print(G.es['flow'][j])
 
     #--------------------------------------------------------------------------
